@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f6feb"/>
+      <stop offset="1" stop-color="#6e40c9"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c9d9ff"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="52" fill="url(#bg)"/>
+  <!-- node graph: a small "lab" of connected nodes -->
+  <g stroke="#ffffff" stroke-opacity="0.85" stroke-width="7" stroke-linecap="round" fill="none">
+    <path d="M84 168 L128 96 L172 168"/>
+    <path d="M84 168 L172 168"/>
+    <path d="M128 96 L128 168"/>
+  </g>
+  <g fill="url(#spark)">
+    <circle cx="128" cy="96" r="15"/>
+    <circle cx="84" cy="168" r="15"/>
+    <circle cx="172" cy="168" r="15"/>
+    <circle cx="128" cy="168" r="11"/>
+  </g>
+</svg>

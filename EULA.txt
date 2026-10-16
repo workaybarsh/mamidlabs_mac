@@ -1,0 +1,73 @@
+MAMIDLABS SON KULLANICI LİSANS SÖZLEŞMESİ (EULA)
+
+Sürüm 1.0.0 — Yürürlük tarihi: 16 Ekim 2026
+Telif hakkı sahibi: Aybars Haydar Altuntaş ("Hak Sahibi")
+
+Lütfen bu sözleşmeyi dikkatlice okuyun. Bu yazılımı ("Yazılım") kurarak,
+kopyalayarak ya da kullanarak bu sözleşmenin tüm koşullarını kabul etmiş
+sayılırsınız. Koşulları kabul etmiyorsanız Yazılımı kurmayın ve kullanmayın.
+
+1. MÜLKİYET VE FİKRİ MÜLKİYET HAKLARI
+   Yazılım ve tüm kaynak kodu, belgeleri, tasarımları, simgeleri ve ilgili
+   materyalleri Hak Sahibine aittir ve telif hakkı yasaları ile uluslararası
+   sözleşmelerle korunur. Bu sözleşme size mülkiyet devretmez; yalnızca
+   aşağıda tanımlanan sınırlı bir kullanım lisansı verir. Tüm haklar saklıdır.
+
+2. LİSANSIN KAPSAMI
+   Hak Sahibi size, bu sözleşmeye uymanız koşuluyla, Yazılımı kendi kişisel
+   ya da kurumsal bilgisayarınızda, kendi amaçlarınız için kullanmanız için
+   münhasır olmayan, devredilemez ve alt lisanslanamaz bir hak verir.
+
+3. YASAKLANAN EYLEMLER
+   Aşağıdakiler açıkça yasaktır:
+   a) Yazılımı kopyalamak, çoğaltmak, dağıtmak, satmak, kiralamak ya da
+      ticari olarak pazarlamak;
+   b) Yazılımı değiştirmek, tersine mühendislik yapmak, kaynak koda dönüştürmek,
+      üzerinde değişiklik yapmak ya da türev çalışmalar üretmek;
+   c) Lisans korumalarını, kopya korumalarını ya da kısıtlamaları kaldırmak,
+      atlatmak ya da "crack"lemek;
+   d) Telif hakkı, ticari marka ya da diğer mülkiyet bildirimlerini kaldırmak
+      ya da değiştirmek;
+   e) Yazılımı yasa dışı, zararlı, taciz edici ya da başkalarının haklarını
+      ihlal eden amaçlarla kullanmak.
+
+4. İZİNSİZ KULLANIMIN HUKUKİ SONUÇLARI
+   Bu sözleşmenin ihlali halinde Hak Sahibi, yürürlükteki hukuk çerçevesinde
+   tazminat ve ihtiyati tedbir dahil tüm hukuki yollara başvurma hakkını saklı
+   tutar. İhlal, lisansın derhal sona ermesine yol açar.
+
+5. SANSÜRSÜZ / AÇIK KAYNAK YAPAY ZEKÂ MODELLERİ VE ÜÇÜNCÜ TARAF BİLEŞENLER
+   Yazılım, filtreli ya da filtresiz açık kaynak yapay zekâ modellerini
+   (örneğin GGUF dil modelleri, difüzyon modelleri, konuşma tanıma ve OCR
+   modelleri) ve üçüncü taraf bileşenleri (llama.cpp, ComfyUI ve eklentileri,
+   Python paketleri) kullanır ya da indirir. Bu modeller ve bileşenler
+   Hak Sahibi tarafından üretilmemiş, eğitilmemiş ve sahiplenilmemiştir;
+   Hak Sahibi yalnızca kamuya açık kaynaklara erişimi kolaylaştırır ve ilgili
+   üçüncü taraf lisansları geçerlidir. Yazılım bilimsel ve eğitimsel amaçlarla
+   sunulur. Modellerin ürettiği içerikten ve bu içeriğin kötü niyetli ya da
+   yasa dışı kullanımından münhasıran kullanıcı sorumludur; Hak Sahibi bu
+   kullanımdan dolayı sorumlu tutulamaz.
+
+6. SORUMLULUK REDDİ
+   Yazılım "OLDUĞU GİBİ" sunulur; açık ya da zımni hiçbir garanti verilmez.
+   Hak Sahibi, Yazılımın kesintisiz, hatasız ya da belirli bir amaca uygun
+   olacağını garanti etmez. Yazılımın kullanımından ya da kullanılamamasından
+   doğan veri kaybı, kâr kaybı ya da diğer zararlardan Hak Sahibi sorumlu
+   değildir.
+
+7. SORUMLULUĞUN SINIRLANDIRILMASI
+   Yürürlükteki hukukun izin verdiği azami ölçüde, Hak Sahibinin bu sözleşmeden
+   doğan toplam sorumluluğu, kullanıcının Yazılım için ödediği tutarla (varsa)
+   sınırlıdır.
+
+8. FESİH
+   Bu sözleşme, siz ihlal edene kadar yürürlükte kalır. İhlal halinde lisans
+   kendiliğinden sona erer; Yazılımın tüm kopyalarını silmeniz gerekir.
+
+9. YÜRÜRLÜKTEKİ HUKUK VE YETKİLİ MAHKEME
+   Bu sözleşme Türkiye Cumhuriyeti hukukuna tabidir. Uyuşmazlıklarda Türkiye
+   Cumhuriyeti mahkemeleri ve icra daireleri yetkilidir.
+
+10. BÜTÜN SÖZLEŞME
+    Bu sözleşme, taraflar arasındaki anlaşmanın tamamını oluşturur ve önceki
+    tüm beyanların yerine geçer.

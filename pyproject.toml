@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mamidlabs"
+version = "1.0.0"
+description = "MamidLabs — tamamen yerel, çok modlu yapay zekâ çalışma alanı (macOS)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Aybars Haydar Altuntaş" }]
+keywords = ["llama.cpp", "ComfyUI", "Qt6", "local", "multimodal", "offline", "macOS", "Metal"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: MacOS X",
+    "Intended Audience :: End Users/Desktop",
+    "License :: Other/Proprietary License",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# Runtime bağımlılıkları. Kurulum betiği requirements/app.txt'i kurar; bu liste
+# `pip install -e .` ile elle kurulumda da doğru ortamı getirir.
+dependencies = [
+    "PySide6==6.8.1",
+    "matplotlib==3.10.1",
+    "keyring==25.6.0",
+    "requests==2.34.2",
+    "pillow==12.3.0",
+    "huggingface_hub==1.32.0",
+    "ddgs==9.16.0",
+    "pypdf==6.19.0",
+    "reportlab==5.0.1",
+    "python-docx==1.2.0",
+    "python-pptx==1.0.2",
+    "openpyxl==3.1.5",
+    "rarfile==4.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[project.scripts]
+mamidlabs = "mamidlabs.__main__:main"
+
+[project.gui-scripts]
+mamidlabs-gui = "mamidlabs.ui.app:main"
+
+[tool.setuptools.packages.find]
+include = ["mamidlabs*"]
+
+[tool.setuptools.package-data]
+"mamidlabs.workers" = ["*.py", "transcriber/*.py"]
+"mamidlabs.workers.transcriber" = ["*.py"]

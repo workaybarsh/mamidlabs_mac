@@ -1,0 +1,25 @@
+# venv/app: uygulama + sohbet araçları (web arama, belge okuma/yazma, HF indirme,
+# grafik) ve Qt6 masaüstü arayüzü.
+#
+# Sürümler Windows/Linux sürümleriyle aynı hizada tutulur (macOS'ta da aynı
+# sürümler doğrulanır). Kurulum: venv/app/bin/python -m pip install -r requirements/app.txt
+#
+# PySide6: Qt6 masaüstü arayüzü (WinForms'in macOS karşılığı).
+PySide6==6.8.1
+# Grafik üretimi (Windows'taki System.Drawing karşılığı).
+matplotlib==3.10.1
+# API anahtarlarını macOS oturum anahtarlığı (Keychain) üzerinden saklamak için;
+# yoksa 0600 izinli settings/api.json kullanılır.
+keyring==25.6.0
+requests==2.34.2
+pillow==12.3.0
+huggingface_hub==1.32.0
+ddgs==9.16.0
+pypdf==6.19.0
+reportlab==5.0.1
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5
+rarfile==4.5
+# Geliştirme/test
+pytest==9.1.1

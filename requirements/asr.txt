@@ -1,0 +1,15 @@
+# venv/asr: yerel konuşma + ses olayı döküm hattı.
+#   - faster-whisper: Whisper large-v3-tr (CTranslate2) konuşma dökümü + Silero VAD
+#   - transformers: AST (AudioSet) ses olayı etiketleme
+#   - pyannote.audio: konuşmacı ayrımı (opsiyonel; HF token ister)
+#   - av: 16 kHz mono WAV'a çevirme (ffmpeg gerekmez)
+#
+# macOS NOTU: CTranslate2'nin Metal arka ucu yoktur; faster-whisper burada CPU'da
+# çalışır (int8). torch/torchaudio PyPI'dan (MPS'li) kurulur:
+#   venv/asr/bin/python -m pip install torch torchaudio
+#   venv/asr/bin/python -m pip install -r requirements/asr.txt
+faster-whisper==1.1.1
+transformers==5.17.0
+pyannote.audio==3.3.2
+av==18.1.0
+onnxruntime==1.20.1

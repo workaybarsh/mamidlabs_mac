@@ -1,0 +1,7 @@
+# venv/ocr: PaddleOCR (isteğe bağlı bileşen; kurulumda --skip-ocr ile atlanır).
+#
+# macOS NOTU: PaddlePaddle'ın macOS tekerleği yalnızca CPU'dur (Metal/MPS yok):
+#   venv/ocr/bin/python -m pip install paddlepaddle
+#
+# Ardından: venv/ocr/bin/python -m pip install -r requirements/ocr.txt
+paddleocr>=3.0
