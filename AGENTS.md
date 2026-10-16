@@ -65,6 +65,7 @@ ve araç kümesi Windows sürümüyle birebir tutulur.
 | `tests/` | pytest (158 test; PySide6 gerektirmez) |
 | `docs/` | `kurulum.md`, `teknik-notlar.md` |
 | `.github/workflows/tests.yml` | CI (macos-latest, Python 3.12) |
+| `.github/workflows/kurulum-paketi.yml` | Yayın: `v*` etiketinde `.dmg` derler, sabit adla (`MamidLabs.dmg`) GitHub Release'e yükler |
 | `AGENTS.md` | Bu rehber. Kurulum köküne kopyalanmaz. |
 
 ### İşçiler (`mamidlabs/workers/`)
@@ -268,7 +269,10 @@ modelin metni kullanılmaz, dürüst mesaj gösterilir; uydurma atıflar
 - **Güncelleme:** uygulamayı kapat → `git pull` → `install-mamidlabs.sh --stage layout`.
 - **Sürüm ve yayım:** sürümün tek kaynağı `mamidlabs/__init__.py:__version__` ve
   `pyproject.toml:version` (eşit olmalı). Yeni sürüm: ikisini artır, `CHANGELOG.md`'ye
-  bölüm ekle, `v<sürüm>` etiketini it.
+  bölüm ekle, `v<sürüm>` etiketini it. Etiket itilince
+  `.github/workflows/kurulum-paketi.yml` `.dmg`'yi derler ve **sabit adla**
+  (`MamidLabs.dmg`) GitHub Release'e yükler; `releases/latest/download/MamidLabs.dmg`
+  böylece her zaman en son sürümü indirir.
 
 ## 11. Ayarlar ve kullanıcı verisi
 
@@ -418,5 +422,6 @@ Her özellik/değişiklik için bir satır ekle (en yeni üstte).
 
 | Tarih | Değişiklik | Dosyalar |
 |---|---|---|
+| 2026-10-16 | **Yayın iş akışı eklendi (`.dmg`).** `v*` etiketi itilince `packaging/macos/build-dmg.sh` ile `.dmg` derlenir ve **sabit adla** (`MamidLabs.dmg`) GitHub Release'e yüklenir; README'ye "Hazır paket (.dmg)" bölümü ve `releases/latest/download/MamidLabs.dmg` bağlantısı eklendi. Dal/PR koşuları yalnızca artifact üretir; etiket `__version__` ile eşleşmezse iş durur. | .github/workflows/kurulum-paketi.yml, README.md, CHANGELOG.md, AGENTS.md |
 | 2026-10-16 | **Kurulum sihirbazı + donanım ölçümü + `.dmg` paketi eklendi; çalışma anı TR/ENG yerelleştirme bağlandı.** Qt6 `QWizard` (13 sayfa) ilk adımda **Türkçe mi English mi** diye sorar; seçim canlı çevirir ve `settings/api.json:language`'a yazılır. `hwinfo` **birleşik belleğe** bakar (Apple Silicon ≥ 32 GB → PRO, ≥ 16 GB → LITE, Intel/az bellek → API). `packaging/macos/build-dmg.sh` sihirbazı gömen bir `.dmg` üretir (`MamidLabs Kurulum.app` + gömülü kaynaklar). `install-mamidlabs.sh` artık `--language` alıp ilerleme/özet dosyaları yazıyor. i18n kablolaması tüm arayüze, çekirdeğe (`inference`, `tools`, `settings`) ve CLI'a uygulandı; `conftest.py` dil durumunu sıfırlar. Testler: `test_hwinfo.py`, `test_wizard.py` (saf), `test_wizard_gui.py` (başsız Qt), `test_i18n.py`, `test_packaging_contract.py` (toplam 158). | `mamidlabs/core/{i18n,hwinfo}.py`, `mamidlabs/locales/*`, `mamidlabs/wizard/*`, `mamidlabs/ui/*`, `mamidlabs/__main__.py`, `scripts/*`, `packaging/macos/*`, `pyproject.toml`, `conftest.py`, `tests/*`, `README.md`, `CHANGELOG.md` |
 | 2026-10-16 | **macOS sürümü ilk kez yazıldı (1.0.0).** Linux portu (Python 3.12 + PySide6/Qt6) temel alınarak macOS'a uyarlandı; sabitler, davranışlar ve araç kümesi Windows sürümüyle birebir korundu. Kurulum kökü `~/Library/Application Support/mamidlabs`; bellek kapısı `nvidia-smi` yerine birleşik bellek (`vm_stat` + `hw.pagesize`, `MAMIDLABS_FREE_MEM_MIB` ile geçersiz kılınabilir); llama.cpp Metal (macos-arm64/x64); torch PyPI'dan (MPS), CUDA index'i ve `nvidia-*` paketleri kaldırıldı; transcriber macOS'ta CPU'ya sabitlendi; `run_command` `/bin/zsh`; web User-Agent macOS; PDF yazı tipleri macOS + matplotlib DejaVu; 7-Zip Homebrew yolları; `.desktop` yerine `.app` paketi (`Info.plist` + `MacOS-MamidLabs` + PNG→ICNS); kurulum/yönetim/kaldırma/smoke betikleri bash 3.2 uyumlu; CI `macos-latest`; testler platforma duyarlı ve yeni bellek testleri eklendi. | tümü |

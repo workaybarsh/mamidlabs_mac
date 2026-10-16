@@ -59,6 +59,15 @@ bağlamı varken sunulur.
 
 ## Kurulum
 
+### Hazır paket (.dmg)
+
+En son sürümün `.dmg` paketini doğrudan indirin:
+
+- **İndir:** [`MamidLabs.dmg`](https://github.com/workaybarsh/mamidlabs_mac/releases/latest/download/MamidLabs.dmg)
+
+DMG'yi açıp **MamidLabs Kurulum** uygulamasını `Applications` klasörüne sürükleyin,
+sonra çalıştırın.
+
 ### Kurulum sihirbazı (önerilen)
 
 `MamidLabs-Kurulum-<sürüm>.dmg`'yi açıp **MamidLabs Kurulum** uygulamasını
