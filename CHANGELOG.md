@@ -10,6 +10,27 @@ Sürümün tek kaynağı `mamidlabs/__init__.py` içindeki `__version__` ve
 ## [1.0.0] — 2026-10-16
 
 ### Eklendi
+- **Kurulum sihirbazı (Qt6).** **MamidLabs Kurulum.app** (ya da
+  `scripts/mamidlabs-setup.sh`) donanımı ölçüp uygun profili öneren bir sihirbaz
+  açar: dil (Türkçe/English) → karşılama → lisans → klasör → donanım raporu →
+  profil (LITE/PRO/indirme yok/kendi modelin–API) → (kendi modellerin) → (API) →
+  (bileşenler) → hazır → kurulum → özet → bitiş. 13 sayfa; `mamidlabs/wizard/`.
+  Sihirbaz `settings/api.json`'a dili ve seçimleri yazar, kurulumu
+  `install-mamidlabs.sh` üzerinden yürütür ve ilerlemeyi
+  `logs/kurulum-adim.txt`'ten okur.
+- **Donanım ölçümü** (`mamidlabs/core/hwinfo.py`): **birleşik bellek** ve CPU
+  ailesi temelli öneri (Apple Silicon ≥ 32 GB → PRO, ≥ 16 GB → LITE; Intel Mac ya
+  da az bellek → API sağlayıcıları), macOS sürümü, çekirdek sayısı ve boş disk.
+- **`.dmg` paketi** (`packaging/macos/build-dmg.sh`): içinde **MamidLabs
+  Kurulum.app** bulunan bir disk görüntüsü üretir; `.app` gömülü Python
+  kaynaklarıyla `python3 -m mamidlabs.wizard` çalıştırır.
+- **Çalışma anı TR/ENG yerelleştirme**: tüm arayüz, çekirdek, CLI ve sihirbaz
+  metinleri `mamidlabs/locales/{tr,en}.json` kataloglarından gelir; arayüz dili
+  menüden ve sihirbazın ilk adımından anında değişir. `--lang`, `--language`.
+- `install-mamidlabs.sh --language tr|en` (ayar dosyasına yazar), sihirbaz için
+  ilerleme (`logs/kurulum-adim.txt`) ve özet (`logs/kurulum-ozeti.txt`) dosyaları.
+- Yeni testler: `test_hwinfo.py`, `test_wizard.py` (saf), `test_wizard_gui.py`
+  (başsız Qt), `test_i18n.py`, `test_packaging_contract.py` (toplam 158 test).
 - **MamidLabs macOS sürümü.** Windows sürümünün (`MamidLabsTR` / `MamidLabsENG`)
   tam macOS portu: WinForms/PowerShell yerine tek dilde **Python 3.12 + PySide6
   (Qt6)** masaüstü uygulaması.

@@ -22,12 +22,12 @@ import os
 import re
 import shlex
 import subprocess
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from . import chart as chart_mod
+from . import i18n
 from . import providers
 from .paths import Paths
 from .runner import WorkerRunner
@@ -91,8 +91,7 @@ class WebTracker:
     def add_failure_note(self, text: str) -> str:
         if self.success:
             return text
-        return text + ("\n\n[İnternet araması başarısız oldu; yanıttaki bilgiler güncel bir "
-                       "kaynaktan doğrulanamadı.]")
+        return text + i18n.t("chat.web_failure_note")
 
 
 # --- tool specs --------------------------------------------------------------

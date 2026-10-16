@@ -19,6 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 
+from . import i18n
 from .paths import Paths
 
 #: Keyring service name used when the OS keyring is available.
@@ -50,6 +51,9 @@ DEFAULTS: dict[str, Any] = {
     # MTP (speculative decoding) is on unless the user disables it.
     "mtp": True,
     "theme": "system",
+    # Interface language chosen in the setup wizard (tr | en). The app reads it
+    # on start; changing it in the menu writes it back and retranslates live.
+    "language": i18n.DEFAULT_LANGUAGE,
 }
 
 
@@ -176,6 +180,15 @@ class Settings:
     @local_profile.setter
     def local_profile(self, value: str) -> None:
         self._data["localProfile"] = value
+
+    @property
+    def language(self) -> str:
+        """Interface language code (always a supported one)."""
+        return i18n.normalize(str(self._data.get("language") or i18n.DEFAULT_LANGUAGE))
+
+    @language.setter
+    def language(self, value: str) -> None:
+        self._data["language"] = i18n.normalize(value)
 
     @property
     def secret_backend(self) -> str:

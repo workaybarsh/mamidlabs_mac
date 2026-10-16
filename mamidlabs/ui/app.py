@@ -9,23 +9,30 @@ from __future__ import annotations
 
 import sys
 
+from ..core import i18n
 from ..core.paths import Paths
 from ..core.settings import Settings
 
 
-def main(argv: list[str] | None = None) -> int:
-    argv = list(sys.argv if argv is None else argv)
-    root = None
-    if "--root" in argv:
-        index = argv.index("--root")
+def _arg_value(argv: list[str], name: str) -> str | None:
+    if name in argv:
+        index = argv.index(name)
         if index + 1 < len(argv):
-            root = argv[index + 1]
+            return argv[index + 1]
+    return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    # The "PySide6 not found" notice is localised; make sure it can be printed.
+    i18n.configure_console()
+    argv = list(sys.argv if argv is None else argv)
+    root = _arg_value(argv, "--root")
+    lang = _arg_value(argv, "--lang")
 
     try:
         from PySide6.QtWidgets import QApplication
     except ImportError:  # pragma: no cover - only on a machine without PySide6
-        print("PySide6 bulunamadı. Kurulum: scripts/install-mamidlabs.sh ya da\n"
-              "  python3 -m pip install PySide6", file=sys.stderr)
+        print(i18n.t("app.no_pyside"), file=sys.stderr)
         return 2
 
     from .main_window import MainWindow
@@ -33,8 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     paths = Paths(root)
     settings = Settings(paths)
 
+    # Language precedence: --lang > settings file > environment > default.
+    i18n.set_language(lang or settings.language or i18n.language_from_env())
+
     app = QApplication.instance() or QApplication([argv[0] if argv else "mamidlabs"])
-    app.setApplicationName("MamidLabs")
+    app.setApplicationName(i18n.t("app.name"))
     app.setApplicationVersion("1.0.0")
 
     window = MainWindow(paths, settings)

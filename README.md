@@ -59,10 +59,34 @@ bağlamı varken sunulur.
 
 ## Kurulum
 
+### Kurulum sihirbazı (önerilen)
+
+`MamidLabs-Kurulum-<sürüm>.dmg`'yi açıp **MamidLabs Kurulum** uygulamasını
+`Applications` klasörüne sürükleyin. Sihirbaz donanımı ölçüp uygun profili önerir:
+
+> dil (Türkçe / English) → karşılama → lisans → kurulum klasörü → donanım raporu →
+> profil (LITE / PRO / şimdi indirme / kendi modelin–API) → (kendi modellerin) →
+> (API) → (bileşenler) → hazır → kurulum → özet → bitiş
+
+Sihirbaz dil seçimini `settings/api.json`'a yazar, kendi model yollarını ve
+bileşen seçimlerini kaydeder ve gerçek işi `scripts/install-mamidlabs.sh`'e
+bırakır; ilerlemeyi `logs/kurulum-adim.txt`'ten okur.
+
+DMG'yi kendiniz de derleyebilirsiniz:
+
+```bash
+packaging/macos/build-dmg.sh    # packaging/macos/Output/MamidLabs-Kurulum-<sürüm>.dmg
+./scripts/mamidlabs-setup.sh    # kaynaktan doğrudan sihirbazı aç
+```
+
+Ayrıntı: [`packaging/macos/README.md`](packaging/macos/README.md).
+
+### Terminalden
+
 ```bash
 git clone https://github.com/workaybarsh/mamidlabs_mac.git
 cd mamidlabs_mac
-./scripts/install-mamidlabs.sh --profile flash
+./scripts/install-mamidlabs.sh --profile flash --language tr
 ```
 
 Kurulum aşamaları: `preflight → layout → llama → python → comfyui → models → verify`.
@@ -79,6 +103,7 @@ Faydalı seçenekler:
 |---|---|
 | `--root <yol>` | Kurulum kökü (varsayılan `~/Library/Application Support/mamidlabs`) |
 | `--profile max\|flash\|lite` | Model indirme profili (varsayılan: indirmez) |
+| `--language tr\|en` | Arayüz dili; `settings/api.json`'a yazılır |
 | `--skip-media` | ComfyUI ve görsel/video bileşenlerini atla |
 | `--skip-audio` | Ses dökümü ortamını (`venv/asr`) atla |
 | `--skip-ocr` | OCR ortamını (`venv/ocr`) atla |
@@ -173,10 +198,12 @@ yüklenmeden önce kapatılır (boşta ne bellek ne GPU tutar).
 
 ```bash
 python3 -m pip install pytest -r requirements/app.txt
-python3 -m pytest -q
+python3 -m pytest -q          # 158 test; PySide6 gerektirmez (Qt yalnızca sihirbaz testlerinde lazım)
 ```
 
-Uçtan uca doğrulama (kurulu kökte, gerçek modellerle):
+PySide6 kuruluysa sihirbazın penceresi de başsız (`QT_QPA_PLATFORM=offscreen`)
+test edilir; kurulu değilse o testler atlanır. Uçtan uca doğrulama (kurulu kökte,
+gerçek modellerle):
 
 ```bash
 ./scripts/smoke-test.sh --profile flash

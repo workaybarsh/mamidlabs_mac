@@ -1,0 +1,29 @@
+#!/bin/zsh
+# MamidLabs Kurulum.app iç yürütücüsü.
+#
+# Sihirbazı, uygulama paketinin içine gömülü Python kaynaklarıyla çalıştırır.
+# Sistem Python'u (ya da Homebrew Python 3.12) kullanılır; PySide6 yoksa sihirbaz
+# anlaşılır bir mesaj yazıp çıkar.
+set -e
+
+BUNDLE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SRC_DIR="$BUNDLE_DIR/Resources/mamidlabs-src"
+
+PYTHON=""
+for candidate in /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12 \
+                 /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
+  if [ -x "$candidate" ]; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+if [ -z "$PYTHON" ]; then
+  PYTHON="$(command -v python3 || true)"
+fi
+if [ -z "$PYTHON" ]; then
+  osascript -e 'display alert "MamidLabs" message "Python 3 bulunamadı. Kur: brew install python@3.12" as critical' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+export PYTHONPATH="$SRC_DIR${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PYTHON" -m mamidlabs.wizard "$@"

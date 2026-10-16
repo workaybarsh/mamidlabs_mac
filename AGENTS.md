@@ -38,6 +38,10 @@ ve araç kümesi Windows sürümüyle birebir tutulur.
 | `mamidlabs/ui/main_window.py` | Ana pencere, sohbet, profil/sağlayıcı seçicileri, çipler, `TurnWorker`/`ManageWorker` |
 | `mamidlabs/ui/settings_dialog.py` | API bağlantıları penceresi, anahtar doğrulama |
 | `mamidlabs/ui/theme.py` | Qt stil sayfası |
+| `mamidlabs/core/i18n.py` | Çalışma anı yerelleştirme (TR kaynak; EN geri düşer) |
+| `mamidlabs/locales/{tr,en}.json` | Arayüz metinleri (TR kaynak, EN çeviri) |
+| `mamidlabs/core/hwinfo.py` | Donanım ölçümü + profil önerisi (birleşik bellek; sihirbaz 5. adım) |
+| `mamidlabs/wizard/` | Kurulum sihirbazı: `__init__.py` (saf yardımcılar), `setup.py` (Qt6 `QWizard`, 13 sayfa), `__main__.py` (giriş + masaüstü denetimi) |
 | `mamidlabs/core/paths.py` | macOS kurulum kökü ve tüm yollar (`is_macos`, `default_root`) |
 | `mamidlabs/core/settings.py` | `api.json` deposu (atomik yazım, `0600`), `SecretStore`, `secret_backend` |
 | `mamidlabs/core/profiles.py` | Profil kataloğu, takma adlar, hedef yollar, eksik dosyalar |
@@ -52,10 +56,13 @@ ve araç kümesi Windows sürümüyle birebir tutulur.
 | `scripts/manage-mamidlabs.sh` | Model/ComfyUI yönetimi, doctor, profiles |
 | `scripts/uninstall-mamidlabs.sh` | Tam kaldırma (kök dışına dokunmaz) |
 | `scripts/smoke-test.sh` | Gerçek modellerle uçtan uca doğrulama |
-| `packaging/Info.plist`, `packaging/MacOS-MamidLabs` | `.app` paketi şablonları (`@VERSION@`, `@ROOT@` yer tutucuları) |
-| `packaging/mamidlabs.png`, `packaging/mamidlabs.svg` | Simge (`.icns` kurulumda üretilir) |
+| `scripts/mamidlabs-setup.sh` | Kurulum sihirbazını başlatır (`python3 -m mamidlabs.wizard`) |
+| `packaging/macos/build-dmg.sh` | `.dmg` üretir (sihirbaz `.app`'i gömer); `packaging/macos/README.md` |
+| `packaging/Info.plist`, `packaging/MacOS-MamidLabs` | uygulama `.app` şablonları (`@VERSION@`, `@ROOT@` yer tutucuları) |
+| `packaging/macos/Info.plist`, `packaging/macos/MacOS-MamidLabsSetup` | sihirbaz `.app` şablonları |
+| `packaging/mamidlabs.png`, `packaging/mamidlabs.svg` | Simge (`.icns` derlemede üretilir) |
 | `requirements/{app,imagegen,asr,ocr}.txt` | Python paketleri (sabit sürümler) |
-| `tests/` | pytest (PySide6 gerektirmez) |
+| `tests/` | pytest (158 test; PySide6 gerektirmez) |
 | `docs/` | `kurulum.md`, `teknik-notlar.md` |
 | `.github/workflows/tests.yml` | CI (macos-latest, Python 3.12) |
 | `AGENTS.md` | Bu rehber. Kurulum köküne kopyalanmaz. |
@@ -232,9 +239,17 @@ modelin metni kullanılmaz, dürüst mesaj gösterilir; uydurma atıflar
 
 ## 10. Kurulum, güncelleme ve kaldırma
 
-- `install-mamidlabs.sh [--root] [--profile] [--stage a,b] [--skip-media]
-  [--skip-audio] [--skip-ocr] [--skip-models] [--no-desktop] [--no-cuda] [--force]`.
-  Aşamalar: `preflight`, `layout`, `llama`, `python`, `comfyui`, `models`, `verify`.
+- `install-mamidlabs.sh [--root] [--profile] [--language tr|en] [--stage a,b]
+  [--skip-media] [--skip-audio] [--skip-ocr] [--skip-models] [--no-desktop]
+  [--no-cuda] [--force]`. Aşamalar: `preflight`, `layout`, `llama`, `python`,
+  `comfyui`, `models`, `verify`. `--language` seçimi `settings/api.json`'a yazar;
+  aşama döngüsü ilerlemeyi `logs/kurulum-adim.txt` (satır 1/2/3: adım no, toplam,
+  ad), sonunda özeti `logs/kurulum-ozeti.txt` yazar (sihirbaz bunları okur).
+- **Sihirbaz ve DMG:** `packaging/macos/build-dmg.sh` içinde **MamidLabs
+  Kurulum.app** bulunan bir `.dmg` üretir (`hdiutil`, `-format UDZO`); uygulama
+  paketi `Contents/Resources/mamidlabs-src` altına gömülü Python kaynaklarını
+  taşır ve `python3 -m mamidlabs.wizard` çalıştırır. Kaynaktan `./scripts/mamidlabs-setup.sh`
+  de aynı sihirbazı açar.
 - Betik **macOS'un bash 3.2'si** ile uyumludur (ilişkisel dizi, `mapfile`,
   `${var,,}` **kullanılmaz**); shebang `#!/bin/bash`.
 - `layout` program dosyalarını, başlatıcıyı ve `~/Applications/MamidLabs.app`
@@ -278,12 +293,16 @@ Sohbetler `chats/` altında saklanır. `logs/audit.jsonl`: araç çağrıları k
 
 ```bash
 python3 -m pip install pytest -r requirements/app.txt
-python3 -m pytest -q          # PySide6 gerektirmez (GUI içe aktarılmaz)
+python3 -m pytest -q          # 158 test; PySide6 gerektirmez (yalnızca sihirbaz penceresi testleri)
 ./scripts/smoke-test.sh --profile flash
 ```
 
 - `conftest.py` `MAMIDLABS_ROOT`'u geçici bir köke yönlendirir; testler
-  `__file__`'dan bağımsız çalışır.
+  `__file__`'dan bağımsız çalışır. Aynı dosyadaki autouse fikstür, süreç-global
+  dil durumunu (`i18n`) her testten önce/sonra Türkçe'ye sıfırlar.
+- `tests/test_wizard.py` saf yardımcıları Qt olmadan sınar;
+  `tests/test_wizard_gui.py` sihirbaz penceresini başsız açmayı dener ve Qt
+  yüklenemezse (ör. sistem kütüphanesi eksik) atlanır.
 - Testler PySide6'yı **içe aktarmaz**; çekirdek mantık saf Python'dur. GUI
   yalnızca gerçek bir masaüstünde (smoke testinin arayüz adımlarında) çalışır.
 - `test_paths.py` platforma duyarlıdır: macOS'ta `default_root()` Library
@@ -368,6 +387,14 @@ macOS'ta her zaman `('cpu', False)` döner.
     `download.pytorch.org/whl/cu130` gibi index'ler macOS'ta çalışmaz.
     `nvidia-cublas-cu12`/`nvidia-cudnn-cu12` macOS için yoktur, requirements/asr.txt'te
     **bulunmaz**.
+16. **Sihirbaz Qt ve masaüstü ister.** `python3 -m mamidlabs.wizard` PySide6 yoksa
+    `wizard.error.no_pyside` ile **2** koduyla çıkar (`wizard/setup.py` bu yüzden
+    tembel içe aktarılır); macOS'ta `DISPLAY` denetimi yoktur. Sihirbazın saf
+    yardımcıları (`wizard/__init__.py`) Qt olmadan test edilir. Öneri **birleşik
+    belleğe** ve Apple Silicon'a bakar; Intel Mac'e yerel profil önerilmez.
+17. **macOS bash 3.2.** Sihirbaz/paketleme betikleri dahil tüm `scripts/*.sh`
+    `#!/bin/bash` kullanır ve bash 4+ özelliği içermez; `packaging/macos/build-dmg.sh`
+    yalnızca macOS'ta (`hdiutil`) çalışır, CI'da yalnızca `bash -n` ile denetlenir.
 
 ## 15. Değişiklik yaparken kontrol listesi
 
@@ -391,4 +418,5 @@ Her özellik/değişiklik için bir satır ekle (en yeni üstte).
 
 | Tarih | Değişiklik | Dosyalar |
 |---|---|---|
+| 2026-10-16 | **Kurulum sihirbazı + donanım ölçümü + `.dmg` paketi eklendi; çalışma anı TR/ENG yerelleştirme bağlandı.** Qt6 `QWizard` (13 sayfa) ilk adımda **Türkçe mi English mi** diye sorar; seçim canlı çevirir ve `settings/api.json:language`'a yazılır. `hwinfo` **birleşik belleğe** bakar (Apple Silicon ≥ 32 GB → PRO, ≥ 16 GB → LITE, Intel/az bellek → API). `packaging/macos/build-dmg.sh` sihirbazı gömen bir `.dmg` üretir (`MamidLabs Kurulum.app` + gömülü kaynaklar). `install-mamidlabs.sh` artık `--language` alıp ilerleme/özet dosyaları yazıyor. i18n kablolaması tüm arayüze, çekirdeğe (`inference`, `tools`, `settings`) ve CLI'a uygulandı; `conftest.py` dil durumunu sıfırlar. Testler: `test_hwinfo.py`, `test_wizard.py` (saf), `test_wizard_gui.py` (başsız Qt), `test_i18n.py`, `test_packaging_contract.py` (toplam 158). | `mamidlabs/core/{i18n,hwinfo}.py`, `mamidlabs/locales/*`, `mamidlabs/wizard/*`, `mamidlabs/ui/*`, `mamidlabs/__main__.py`, `scripts/*`, `packaging/macos/*`, `pyproject.toml`, `conftest.py`, `tests/*`, `README.md`, `CHANGELOG.md` |
 | 2026-10-16 | **macOS sürümü ilk kez yazıldı (1.0.0).** Linux portu (Python 3.12 + PySide6/Qt6) temel alınarak macOS'a uyarlandı; sabitler, davranışlar ve araç kümesi Windows sürümüyle birebir korundu. Kurulum kökü `~/Library/Application Support/mamidlabs`; bellek kapısı `nvidia-smi` yerine birleşik bellek (`vm_stat` + `hw.pagesize`, `MAMIDLABS_FREE_MEM_MIB` ile geçersiz kılınabilir); llama.cpp Metal (macos-arm64/x64); torch PyPI'dan (MPS), CUDA index'i ve `nvidia-*` paketleri kaldırıldı; transcriber macOS'ta CPU'ya sabitlendi; `run_command` `/bin/zsh`; web User-Agent macOS; PDF yazı tipleri macOS + matplotlib DejaVu; 7-Zip Homebrew yolları; `.desktop` yerine `.app` paketi (`Info.plist` + `MacOS-MamidLabs` + PNG→ICNS); kurulum/yönetim/kaldırma/smoke betikleri bash 3.2 uyumlu; CI `macos-latest`; testler platforma duyarlı ve yeni bellek testleri eklendi. | tümü |

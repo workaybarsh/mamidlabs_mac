@@ -43,13 +43,18 @@ dev = ["pytest==9.1.1"]
 
 [project.scripts]
 mamidlabs = "mamidlabs.__main__:main"
+mamidlabs-setup = "mamidlabs.wizard.__main__:main"
 
 [project.gui-scripts]
 mamidlabs-gui = "mamidlabs.ui.app:main"
+
+[tool.setuptools]
+include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["mamidlabs*"]
 
 [tool.setuptools.package-data]
+"mamidlabs" = ["locales/*.json"]
 "mamidlabs.workers" = ["*.py", "transcriber/*.py"]
 "mamidlabs.workers.transcriber" = ["*.py"]

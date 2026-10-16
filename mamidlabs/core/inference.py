@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Iterator
 
-from . import providers, tools
+from . import i18n, providers, tools
 from .paths import Paths
 from .settings import Settings
 
@@ -28,16 +28,20 @@ MAX_TOOL_ROUNDS = 8
 DEFAULT_MAX_TOKENS = 8192
 CONTEXT_SAFETY_MARGIN = 1024
 
-SYSTEM_PROMPT = (
-    "Sen MamidLabs adlı, tamamen yerel çalışan çok modlu bir yapay zekâ çalışma alanısın. "
-    "Kullanıcıya Türkçe, açık ve doğru yanıt verirsin.\n"
-    "Kesin bildiğin bilgide net konuş; güncel/doğrulanamaz bilgide uydurma. Elinde araç varsa "
-    "kullan ve sonucu doğrudan yanıtına dayandır.\n"
-    "Çok adımlı matematik/cebir/mantıkta kritik adımları tekrar gözden geçir AMA yanıtını da "
-    "mutlaka yaz; çok uzun düşünüp yanıtsız kalma.\n"
-    "Bir test, teorem, özdeşlik veya kaynak adı KULLANMA; uydurma kaynak/URL yazma.\n"
-    "Görsel/video/belge/grafik gibi üretim araçlarını yalnızca kullanıcı açıkça istediğinde kullan."
-)
+
+def system_prompt() -> str:
+    """The fixed system prompt in the current interface language.
+
+    The prompt is deliberately stable within a turn (KV-cache prefix); it only
+    changes when the user switches the interface language. Turkish is the source
+    text; English comes from ``locales/en.json``.
+    """
+    return i18n.t("prompt.system")
+
+
+#: Turkish source prompt, kept for reference; ``run_turn`` resolves the live
+#: value from the catalog so the language can change at runtime.
+SYSTEM_PROMPT = system_prompt()
 
 
 # --- helpers -----------------------------------------------------------------
@@ -75,7 +79,7 @@ def build_job_messages(system_prompt: str, history: list[dict]) -> list[dict]:
         content = message.get("content")
         if isinstance(content, list) and index < len(history) - 1:
             texts = [str(part.get("text", "")) for part in content if part.get("type") == "text"]
-            texts.append("[önceki turda bir görsel paylaşıldı]")
+            texts.append(i18n.t("chat.previous_image_note"))
             copy = dict(message)
             copy["content"] = "\n".join(t for t in texts if t)
             messages.append(copy)
@@ -100,7 +104,7 @@ def compact_turn_messages(messages: list[dict], context_limit: int,
             continue
         content = message.get("content")
         if isinstance(content, str) and len(content) > 800:
-            message["content"] = content[:800] + " …[kısaltıldı]"
+            message["content"] = content[:800] + i18n.t("chat.truncated")
             if estimate_tokens(result) <= budget:
                 return result, True
     return result, True

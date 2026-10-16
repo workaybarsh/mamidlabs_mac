@@ -24,6 +24,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ROOT="${MAMIDLABS_ROOT:-$HOME/Library/Application Support/mamidlabs}"
 STAGES="preflight,layout,llama,python,comfyui,models,verify"
 PROFILE=""
+LANGUAGE=""
 NO_DESKTOP=0
 SKIP_MEDIA=0
 SKIP_AUDIO=0
@@ -38,6 +39,7 @@ Kullanım: install-mamidlabs.sh [seçenekler]
 
   --root <yol>        Kurulum kökü (varsayılan: ~/Library/Application Support/mamidlabs)
   --profile <ad>      max | flash | lite  (model indirme profili)
+  --language <kod>    tr | en  (arayüz dili; settings/api.json'a yazılır)
   --stage <liste>     Çalıştırılacak aşamalar (virgülle):
                       preflight,layout,llama,python,comfyui,models,verify
   --skip-media        ComfyUI ve görsel/video modellerini atla
@@ -59,6 +61,12 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --root) ROOT="$2"; shift 2 ;;
     --profile) PROFILE="$2"; shift 2 ;;
+    --language)
+      case "$2" in
+        tr|en) LANGUAGE="$2" ;;
+        *) die "geçersiz dil: $2 (tr|en)" ;;
+      esac
+      shift 2 ;;
     --stage) STAGES="$2"; shift 2 ;;
     --skip-media) SKIP_MEDIA=1; shift ;;
     --skip-audio) SKIP_AUDIO=1; shift ;;
@@ -308,9 +316,54 @@ mkdir -p "$ROOT/tools/downloads" "$ROOT/logs"
 log "Kurulum kökü: $ROOT"
 log "Aşamalar: $STAGES"
 
+# Arayüz dili (sihirbaz/CLI): settings/api.json'a yazılır; uygulama açılışta okur.
+if [ -n "$LANGUAGE" ]; then
+  mkdir -p "$ROOT/settings"
+  "$PYTHON" - "$ROOT/settings/api.json" "$LANGUAGE" <<'PY'
+import json, os, sys
+path, lang = sys.argv[1], sys.argv[2]
+data = {}
+if os.path.exists(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        data = {}
+if not isinstance(data, dict):
+    data = {}
+data["language"] = lang
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, ensure_ascii=False, indent=2)
+PY
+fi
+
+# Sihirbazın ilerleme kaynağı: satır 1 = adım no, satır 2 = toplam, satır 3 = ad.
+progress_file="$ROOT/logs/kurulum-adim.txt"
+total=0
+for stage in preflight layout llama python comfyui models verify; do
+  has_stage "$stage" && total=$((total + 1))
+done
+index=0
 for stage in preflight layout llama python comfyui models verify; do
   has_stage "$stage" || continue
+  index=$((index + 1))
+  printf '%s\n%s\n%s\n' "$index" "$total" "$stage" > "$progress_file"
   "stage_${stage}"
 done
+printf '%s\n%s\n%s\n' "$total" "$total" "verify" > "$progress_file"
+
+# Özet: sihirbazın son sayfası bu dosyayı gösterir.
+{
+  echo "MamidLabs kurulum özeti"
+  echo "Kök: $ROOT"
+  echo "Aşamalar: $STAGES"
+  [ -n "$PROFILE" ] && echo "Profil: $PROFILE"
+  [ -n "$LANGUAGE" ] && echo "Dil: $LANGUAGE"
+  echo
+  if [ -x "$ROOT/venv/app/bin/python" ]; then
+    "$ROOT/venv/app/bin/python" -m mamidlabs doctor 2>&1 || true
+  fi
+} > "$ROOT/logs/kurulum-ozeti.txt"
 
 log "Bitti. Başlatmak için: $ROOT/mamidlabs-launch (ya da ~/Applications/MamidLabs.app)"

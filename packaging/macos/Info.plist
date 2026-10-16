@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- MamidLabs KURULUM SİHİRBAZI .app şablonu (DMG için). build-dmg.sh @VERSION@ yerine sürümü koyar. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>MamidLabs Kurulum</string>
+  <key>CFBundleDisplayName</key>
+  <string>MamidLabs Kurulum</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.workaybarsh.mamidlabs.setup</string>
+  <key>CFBundleVersion</key>
+  <string>@VERSION@</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@VERSION@</string>
+  <key>CFBundleExecutable</key>
+  <string>MamidLabsSetup</string>
+  <key>CFBundleIconFile</key>
+  <string>mamidlabs</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.utilities</string>
+</dict>
+</plist>
