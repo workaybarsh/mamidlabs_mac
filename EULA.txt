@@ -1,73 +1,82 @@
-MAMIDLABS SON KULLANICI LİSANS SÖZLEŞMESİ (EULA)
+﻿MAMIDLABS — LİSANS BİLDİRİMİ (PolyForm Strict 1.0.0)
 
-Sürüm 1.0.0 — Yürürlük tarihi: 16 Ekim 2026
-Telif hakkı sahibi: Aybars Haydar Altuntaş ("Hak Sahibi")
+Sürüm 1.0 — Yürürlük tarihi: 2026
+Telif Hakkı (c) 2026 Aybars Haydar Altuntaş.
 
-Lütfen bu sözleşmeyi dikkatlice okuyun. Bu yazılımı ("Yazılım") kurarak,
-kopyalayarak ya da kullanarak bu sözleşmenin tüm koşullarını kabul etmiş
-sayılırsınız. Koşulları kabul etmiyorsanız Yazılımı kurmayın ve kullanmayın.
+Bu yazılım, PolyForm Strict License 1.0.0 koşulları altında sunulur. Kısa özet (bağlayıcı olan
+aşağıdaki resmî İngilizce metindir): Yazılım yalnızca TİCARİ OLMAYAN amaçlarla kullanılabilir;
+yazılımı dağıtamazsınız ve yazılım üzerinde değişiklik veya türev eser yapamazsınız. Ticari
+kullanım için Hak Sahibinden önceden yazılı izin gerekir. Resmî metin ve güncel sürüm:
+https://polyformproject.org/licenses/strict/1.0.0
 
-1. MÜLKİYET VE FİKRİ MÜLKİYET HAKLARI
-   Yazılım ve tüm kaynak kodu, belgeleri, tasarımları, simgeleri ve ilgili
-   materyalleri Hak Sahibine aittir ve telif hakkı yasaları ile uluslararası
-   sözleşmelerle korunur. Bu sözleşme size mülkiyet devretmez; yalnızca
-   aşağıda tanımlanan sınırlı bir kullanım lisansı verir. Tüm haklar saklıdır.
+Kullanılan yapay zekâ modelleri (Qwen, Krea 2, Krea 2 Identity Edit LoRA, Wan 2.2 vb.) ve üçüncü
+taraf bileşenler (llama.cpp, ComfyUI, ComfyUI-GGUF, comfyui-krea2edit vb.) Hak Sahibine ait
+değildir ve kendi lisanslarına tabidir; bu lisans onları kapsamaz. Bu modellerin kötü niyetli,
+yasa dışı veya üçüncü kişilerin haklarını ihlal eden amaçlarla kullanılmasından münhasıran
+Kullanıcı sorumludur. Kullanıcı, yürürlükteki mevzuata ve üçüncü kişilerin haklarına uymakla
+yükümlüdür.
 
-2. LİSANSIN KAPSAMI
-   Hak Sahibi size, bu sözleşmeye uymanız koşuluyla, Yazılımı kendi kişisel
-   ya da kurumsal bilgisayarınızda, kendi amaçlarınız için kullanmanız için
-   münhasır olmayan, devredilemez ve alt lisanslanamaz bir hak verir.
+--------------------------------------------------------------------
 
-3. YASAKLANAN EYLEMLER
-   Aşağıdakiler açıkça yasaktır:
-   a) Yazılımı kopyalamak, çoğaltmak, dağıtmak, satmak, kiralamak ya da
-      ticari olarak pazarlamak;
-   b) Yazılımı değiştirmek, tersine mühendislik yapmak, kaynak koda dönüştürmek,
-      üzerinde değişiklik yapmak ya da türev çalışmalar üretmek;
-   c) Lisans korumalarını, kopya korumalarını ya da kısıtlamaları kaldırmak,
-      atlatmak ya da "crack"lemek;
-   d) Telif hakkı, ticari marka ya da diğer mülkiyet bildirimlerini kaldırmak
-      ya da değiştirmek;
-   e) Yazılımı yasa dışı, zararlı, taciz edici ya da başkalarının haklarını
-      ihlal eden amaçlarla kullanmak.
+PolyForm Strict License 1.0.0
+https://polyformproject.org/licenses/strict/1.0.0
 
-4. İZİNSİZ KULLANIMIN HUKUKİ SONUÇLARI
-   Bu sözleşmenin ihlali halinde Hak Sahibi, yürürlükteki hukuk çerçevesinde
-   tazminat ve ihtiyati tedbir dahil tüm hukuki yollara başvurma hakkını saklı
-   tutar. İhlal, lisansın derhal sona ermesine yol açar.
+Copyright (c) 2026 Aybars Haydar Altuntaş
 
-5. SANSÜRSÜZ / AÇIK KAYNAK YAPAY ZEKÂ MODELLERİ VE ÜÇÜNCÜ TARAF BİLEŞENLER
-   Yazılım, filtreli ya da filtresiz açık kaynak yapay zekâ modellerini
-   (örneğin GGUF dil modelleri, difüzyon modelleri, konuşma tanıma ve OCR
-   modelleri) ve üçüncü taraf bileşenleri (llama.cpp, ComfyUI ve eklentileri,
-   Python paketleri) kullanır ya da indirir. Bu modeller ve bileşenler
-   Hak Sahibi tarafından üretilmemiş, eğitilmemiş ve sahiplenilmemiştir;
-   Hak Sahibi yalnızca kamuya açık kaynaklara erişimi kolaylaştırır ve ilgili
-   üçüncü taraf lisansları geçerlidir. Yazılım bilimsel ve eğitimsel amaçlarla
-   sunulur. Modellerin ürettiği içerikten ve bu içeriğin kötü niyetli ya da
-   yasa dışı kullanımından münhasıran kullanıcı sorumludur; Hak Sahibi bu
-   kullanımdan dolayı sorumlu tutulamaz.
+Required Notice: Copyright (c) 2026 Aybars Haydar Altuntaş
 
-6. SORUMLULUK REDDİ
-   Yazılım "OLDUĞU GİBİ" sunulur; açık ya da zımni hiçbir garanti verilmez.
-   Hak Sahibi, Yazılımın kesintisiz, hatasız ya da belirli bir amaca uygun
-   olacağını garanti etmez. Yazılımın kullanımından ya da kullanılamamasından
-   doğan veri kaybı, kâr kaybı ya da diğer zararlardan Hak Sahibi sorumlu
-   değildir.
+Acceptance
 
-7. SORUMLULUĞUN SINIRLANDIRILMASI
-   Yürürlükteki hukukun izin verdiği azami ölçüde, Hak Sahibinin bu sözleşmeden
-   doğan toplam sorumluluğu, kullanıcının Yazılım için ödediği tutarla (varsa)
-   sınırlıdır.
+In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
 
-8. FESİH
-   Bu sözleşme, siz ihlal edene kadar yürürlükte kalır. İhlal halinde lisans
-   kendiliğinden sona erer; Yazılımın tüm kopyalarını silmeniz gerekir.
+Copyright License
 
-9. YÜRÜRLÜKTEKİ HUKUK VE YETKİLİ MAHKEME
-   Bu sözleşme Türkiye Cumhuriyeti hukukuna tabidir. Uyuşmazlıklarda Türkiye
-   Cumhuriyeti mahkemeleri ve icra daireleri yetkilidir.
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose, other than distributing the software or making changes or new works based on the software.
 
-10. BÜTÜN SÖZLEŞME
-    Bu sözleşme, taraflar arasındaki anlaşmanın tamamını oluşturur ve önceki
-    tüm beyanların yerine geçer.
+Patent License
+
+The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
+
+Noncommercial Purposes
+
+Any noncommercial purpose is a permitted purpose.
+
+Personal Uses
+
+Personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, amateur pursuits, or religious observance, without any anticipated commercial application, is use for a permitted purpose.
+
+Noncommercial Organizations
+
+Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+
+Fair Use
+
+You may have "fair use" rights for the software under the law. These terms do not limit them.
+
+No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else. These terms do not imply any other licenses.
+
+Patent Defense
+
+If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately. If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
+
+Violations
+
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice. Otherwise, all your licenses end immediately.
+
+No Liability
+
+As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.
+
+Definitions
+
+The licensor is the individual or entity offering these terms, and the software is the software the licensor makes available under these terms.
+
+You refers to the individual or entity agreeing to these terms.
+
+Your company is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization. Control means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise. Control can be direct or indirect.
+
+Your licenses are all the licenses granted to you for the software under these terms.
+
+Use means anything you do with the software requiring one of your licenses.

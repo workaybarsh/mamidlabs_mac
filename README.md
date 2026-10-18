@@ -230,5 +230,11 @@ aynı commit'te `AGENTS.md` ve `CHANGELOG.md`'yi de güncelleyin.
 
 ## Lisans
 
-Tescilli yazılım — **tüm hakları saklıdır**. Telif: **Aybars Haydar Altuntaş**.
-Ayrıntılar için [LICENSE](LICENSE) ve [EULA.txt](EULA.txt).
+MamidLabs kaynak kodu **PolyForm Strict License 1.0.0** ile lisanslanmıştır (kaynak-açık;
+yalnızca **ticari olmayan** kullanım). Yazılımı dağıtamaz, değiştiremez veya üzerinde türev eser
+üretemezsiniz; ticari kullanım için Hak Sahibinden önceden yazılı izin gerekir. Telif hakkı
+Aybars Haydar Altuntaş'a aittir. Ayrıntılar için [LICENSE](LICENSE) dosyasına ve
+https://polyformproject.org/licenses/strict/1.0.0 adresine bakın.
+Kullanılan modeller (Qwen, Krea 2, Krea 2 Identity Edit LoRA, Wan 2.2 vb.) ve üçüncü taraf
+bileşenler (llama.cpp, ComfyUI, ComfyUI-GGUF, comfyui-krea2edit vb.) kendi lisanslarına tabidir; bu
+lisans onları kapsamaz.
