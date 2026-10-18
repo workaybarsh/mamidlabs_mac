@@ -10,7 +10,14 @@ for approval before write/execute tools, and applies the same safety behaviour:
   model's text as verified, and fabricated citations are stripped,
 * the turn's prompt is estimated each round; when it would overflow the context
   the oldest tool outputs are shortened (messages are never deleted, so the
-  assistant ``tool_calls`` / ``tool`` pairing stays valid).
+  assistant ``tool_calls`` / ``tool`` pairing stays valid),
+* **untrusted content** read this turn (web page, document, OCR, bound file,
+  folder search) is labelled as *data* for the model, and writing a file or
+  running a command then always asks the user — even with the "full access"
+  chip on (prompt-injection defence),
+* on MAX/FLASH the reasoning effort is picked **once per turn** from the
+  question's difficulty and sent as ``chat_template_kwargs.reasoning_effort``,
+  so switching MAX ↔ FLASH no longer has to reload the model.
 """
 
 from __future__ import annotations
@@ -28,6 +35,17 @@ MAX_TOOL_ROUNDS = 8
 DEFAULT_MAX_TOKENS = 8192
 CONTEXT_SAFETY_MARGIN = 1024
 
+#: Sources whose content is *data*, never a user instruction. Their results are
+#: labelled as untrusted and, if any was read this turn, the guarded tools below
+#: ask for approval even when the "full access" chip is on.
+UNTRUSTED_TOOLS = frozenset({
+    "search_web", "fetch_page", "read_document", "read_images_ocr",
+    "read_bound_file", "search_folder",
+})
+
+#: Tools that must be confirmed when untrusted content was read this turn.
+GUARDED_TOOLS = frozenset({"run_command", "write_bound_file"})
+
 
 def system_prompt() -> str:
     """The fixed system prompt in the current interface language.
@@ -36,12 +54,83 @@ def system_prompt() -> str:
     changes when the user switches the interface language. Turkish is the source
     text; English comes from ``locales/en.json``.
     """
-    return i18n.t("prompt.system")
+    return i18n.t("prompt.system") + "\n" + i18n.t("prompt.untrusted")
 
 
 #: Turkish source prompt, kept for reference; ``run_turn`` resolves the live
 #: value from the catalog so the language can change at runtime.
 SYSTEM_PROMPT = system_prompt()
+
+
+def untrusted_prefix() -> str:
+    """Label prepended to every untrusted tool result (web/document/OCR/file)."""
+    return i18n.t("chat.untrusted_prefix")
+
+
+def approval_required(tool_name: str, *, untrusted_read: bool, access_full: bool) -> bool:
+    """Whether ``tool_name`` must be confirmed this turn.
+
+    With untrusted content read, the guarded tools ask even under full access:
+    a page that hides "run this command" must not be mistaken for the user.
+    """
+    if untrusted_read and tool_name in GUARDED_TOOLS:
+        return True
+    return not access_full
+
+
+# --- auto reasoning effort (MAX/FLASH) ---------------------------------------
+#: Turkish letters folded to ASCII so keyword matching is reliable.
+_TR_FOLD = str.maketrans({
+    "ı": "i", "ü": "u", "ş": "s", "ç": "c", "ö": "o", "ğ": "g", "â": "a", "î": "i",
+})
+
+_AUTO_HARD_RE = re.compile(
+    r"\b(kanitla|ispat|turet|turev|integral|denklem|matris|olasilik|algoritma|"
+    r"hata ayikla|refactor|optimiz|analiz|karsilastir|adim adim|mimari|neden|nicin|"
+    r"acikla|proof|prove|derive|equation|algorithm|debug|analy[sz]e|compare|"
+    r"step by step|implement|architecture)\b")
+_AUTO_CODE_RE = re.compile(
+    r"(?m)^\s*```|\b(function|class|def|import|select|const|let|var)\b|[=<>≤≥∑∫√^]")
+_AUTO_GREETING_RE = re.compile(
+    r"^\s*(merhaba|selam|gunaydin|iyi aksamlar|tesekkur|sagol|hello|hi|thanks|"
+    r"good morning)\b")
+
+
+def auto_reasoning_effort(text: str) -> str:
+    """Pick ``low``/``medium``/``xhigh`` for one turn's question (MAX/FLASH).
+
+    MAX and FLASH are the same model; only the server's ``--reasoning-effort``
+    differs. Choosing it per request avoids reloading the model (~15 s). The
+    choice is made **once per turn** and stays fixed so the system prefix (and
+    thus the KV cache) never changes mid-turn.
+    """
+    if not text or not text.strip():
+        return "low"
+    folded = text.lower().translate(_TR_FOLD)
+    score = 0
+    length = len(text)
+    if length >= 600:
+        score += 2
+    elif length >= 220:
+        score += 1
+    # Multi-step work: maths, proof, code, analysis, architecture, comparison.
+    if _AUTO_HARD_RE.search(folded):
+        score += 2
+    # Code, formula or maths symbols.
+    if _AUTO_CODE_RE.search(text):
+        score += 2
+    if text.count("\n") >= 5:
+        score += 1
+    if text.count("?") >= 2:
+        score += 1
+    # Short greetings/thanks should be answered quickly.
+    if _AUTO_GREETING_RE.search(folded):
+        score -= 3
+    if score >= 4:
+        return "xhigh"
+    if score >= 2:
+        return "medium"
+    return "low"
 
 
 # --- helpers -----------------------------------------------------------------
@@ -147,6 +236,7 @@ class InferenceEngine:
     # --- one completion ------------------------------------------------------
     def complete(self, messages: list[dict], *, provider: str = "local", model: str = "",
                  tool_defs: list[dict] | None = None, max_tokens: int = DEFAULT_MAX_TOKENS,
+                 reasoning_effort: str | None = None,
                  claude_state: providers.ClaudeStream | None = None,
                  replay: dict | None = None) -> Iterator[dict]:
         """Stream one completion, yielding UI events and ending with a private
@@ -156,6 +246,11 @@ class InferenceEngine:
         if tool_defs:
             body["tools"] = tool_defs
             body["tool_choice"] = "auto"
+        # Auto effort is a local-server feature (MAX/FLASH share the same model,
+        # so the effort is picked per request instead of reloading). LITE's
+        # template ignores the key; API providers never receive it.
+        if reasoning_effort and provider in ("", "local"):
+            body["chat_template_kwargs"] = {"reasoning_effort": reasoning_effort}
         result = TurnResult()
         try:
             for chunk in self._stream(provider, body, self.settings,
@@ -185,16 +280,26 @@ class InferenceEngine:
                  provider: str = "local", model: str = "",
                  profile: str = "max", max_tokens: int = DEFAULT_MAX_TOKENS,
                  has_documents: bool = False, has_audio: bool = False,
-                 approve: Callable[[str, dict], bool] | None = None,
+                 approve: Callable[[str, dict, str], bool] | None = None,
                  system_prompt: str = SYSTEM_PROMPT) -> Iterator[dict]:
         chips = chips or {}
+        access_full = bool(chips.get("accessMode", False))
         message_text = _last_user_text(history)
         context_limit = int(self.settings.get("contextLimit", 32768) or 32768)
         web = tools.WebTracker()
         claude_state = providers.ClaudeStream() if provider == "claude" else None
         messages = build_job_messages(system_prompt, history)
         denied: set[str] = set()
+        untrusted_read = False
         final_text = ""
+
+        # MAX and FLASH are the same model; pick the effort once for the whole
+        # turn (constant prefix → KV cache intact). LITE ignores the key; API
+        # providers never receive it.
+        effort: str | None = None
+        if (provider in ("", "local") and profile in ("max", "flash")
+                and bool(self.settings.get("autoEffort", True))):
+            effort = auto_reasoning_effort(message_text)
 
         for _round in range(MAX_TOOL_ROUNDS):
             messages, compacted = compact_turn_messages(messages, context_limit, max_tokens)
@@ -209,6 +314,7 @@ class InferenceEngine:
             result: TurnResult | None = None
             for event in self.complete(messages, provider=provider, model=model,
                                        tool_defs=tool_defs, max_tokens=max_tokens,
+                                       reasoning_effort=effort,
                                        claude_state=claude_state,
                                        replay=(claude_state.replay if claude_state else None)):
                 if event["kind"] == "_result":
@@ -231,20 +337,25 @@ class InferenceEngine:
                 except ValueError:
                     arguments = {}
                 spec = self.registry.get(name)
+                run_tool = True
+                output = ""
                 if spec and spec.kind in ("write", "exec"):
                     if name in denied:
                         output = json.dumps({"error": "kullanıcı bu aracı reddetti."},
                                             ensure_ascii=False)
                         yield {"kind": "denied", "tool": name}
-                    elif approve and not approve(name, arguments):
-                        denied.add(name)
-                        output = json.dumps({"error": "kullanıcı bu aracı reddetti."},
-                                            ensure_ascii=False)
-                        yield {"kind": "denied", "tool": name}
-                    else:
-                        yield {"kind": "tool", "tool": name, "arguments": arguments}
-                        output = self.registry.call(name, arguments)
-                else:
+                        run_tool = False
+                    elif approval_required(name, untrusted_read=untrusted_read,
+                                           access_full=access_full):
+                        reason = (i18n.t("chat.approval_untrusted")
+                                  if untrusted_read and name in GUARDED_TOOLS else "")
+                        if approve and not approve(name, arguments, reason):
+                            denied.add(name)
+                            output = json.dumps({"error": "kullanıcı bu aracı reddetti."},
+                                                ensure_ascii=False)
+                            yield {"kind": "denied", "tool": name}
+                            run_tool = False
+                if run_tool:
                     yield {"kind": "tool", "tool": name, "arguments": arguments}
                     output = self.registry.call(name, arguments)
 
@@ -254,6 +365,14 @@ class InferenceEngine:
                         messages.append({"role": "system",
                                          "content": "[Sistem notu] Web erişimi kurulamadı; "
                                                     "web araçlarını kullanmayı bırak."})
+                # Untrusted sources: the model must treat the result as DATA, so
+                # the content is clearly labelled and any file write/command this
+                # turn then asks for approval (prompt-injection defence).
+                if name in UNTRUSTED_TOOLS:
+                    untrusted_read = True
+                    prefix = untrusted_prefix()
+                    if isinstance(output, str) and output and not output.startswith(prefix):
+                        output = prefix + "\n" + output
                 messages.append({"role": "tool", "tool_call_id": call.get("id", ""),
                                  "name": name, "content": output})
             if web.unavailable:

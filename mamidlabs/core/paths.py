@@ -130,6 +130,11 @@ class Paths:
         return self.tools / "pip-cache"
 
     @property
+    def rag(self) -> Path:
+        """Bound-folder search index (``tools/rag/bound-<hash>.json``)."""
+        return self.tools / "rag"
+
+    @property
     def backups(self) -> Path:
         return self.tools / "backup"
 
@@ -169,6 +174,7 @@ class Paths:
             self.hf_home,
             self.downloads,
             self.pip_cache,
+            self.rag,
             self.backups,
             self.output_dir("images"),
             self.output_dir("videos"),

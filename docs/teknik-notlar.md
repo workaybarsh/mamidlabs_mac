@@ -66,6 +66,23 @@ bu başlığı dönüşümde kaybeder; indirme sırasında `mtp_inject.py` ile g
 Ayrı draft model gerekmez ve çıktı kayıpsızdır. `settings/api.json → mtp=false`
 ile kapatılır.
 
+**Otomatik çaba (MAX/FLASH).** MAX ve FLASH aynı modeldir; tek fark sunucudaki
+`--reasoning-effort` değeridir. Profil değiştirmek modeli yeniden yüklediği
+(~15 sn) için varsayılan olarak çaba **istek başına** verilir
+(`inference.auto_reasoning_effort` → `chat_template_kwargs.reasoning_effort`):
+kısa soru/selamlama `low`, orta `medium`, çok adımlı matematik/kod/analiz/
+karşılaştırma `xhigh`. Seçim tura göre **bir kez** yapılır ve tur boyunca sabit
+kalır (sistem öneki değişip KV önbelleği bozulmaz). Kapatılabilir
+(`settings/api.json → autoEffort`, Profiller menüsü). LITE'ın şablonu bu
+anahtarı yok sayar; API sağlayıcılarına alan gönderilmez.
+
+**İndirme ve doğrulama.** `hf-hub.py` boyutu `bytes` ile doğrular, eksik dosyayı
+`hf_hub_download` ile **kaldığı yerden sürer** ve indirme bitince **SHA256**
+doğrular: katalogda sabit `sha256` varsa onu, yoksa Hugging Face LFS
+metadata'sındaki `lfs.sha256` özetini kullanır (repo/revision başına önbellek).
+Özet uyuşmazsa bozuk dosya **silinir**; doğrulama MTP enjeksiyonundan **önce**
+yapılır çünkü enjeksiyon dosyayı değiştirir. `HF_HOME` kökün altındadır.
+
 **Bellek kapısı.** Gereken = model dosyası + pay. MAX/FLASH pay **750 MiB**
 (tolerans 0: kullanılabilir < gereken ise hata verilir), LITE pay **300 MiB**
 (tolerans 1024 MiB: `[gereken-1024, gereken)` aralığında uyarı). Görsel projektör
@@ -133,10 +150,35 @@ dayanır ve uydurma "Kaynak:"/URL satırları ayıklanır (`strip_fabricated_cit
 
 Üretim araçları (görsel/video/belge/grafik) yalnızca niyet varsa **sunulur** ve
 **çağrı anında** yeniden denetlenir. `run_command` yalnızca kullanıcı açıkça
-komut istediğinde (`/bin/zsh -lc`); bağlı klasör araçları yalnızca "Ajan" çipi
+komut istediğinde (`/bin/zsh -lc`); bağlı klasör araçları (`list_bound_files`,
+`read_bound_file`, `search_folder`, `write_bound_file`) yalnızca "Ajan" çipi
 açıkken; `read_document` yalnızca belge bağlamı varken sunulur. Web araçları, hiç
 başarılı çağrı olmadan ≥2 hata sonrası kilitlenir. Ses eki olan turda modele
-bağlı-klasör **dosya** araçları sunulmaz (ses zaten yazıya çevrilir).
+bağlı-klasör **dosya** araçları sunulmaz (ses zaten yazıya çevrilir; kullanıcı
+açıkça dosya isterse yine sunulur).
+
+### Güvenilmeyen içerik ve onay (prompt injection)
+
+Web/belge/OCR/bağlı dosya içeriği **veri**dir, talimat değil. `search_web`,
+`fetch_page`, `read_document`, `read_images_ocr`, `read_bound_file` ve
+`search_folder` sonuçları modele `chat.untrusted_prefix` etiketiyle verilir;
+sabit sistem istemi (`prompt.untrusted`) içerikteki "önceki talimatları yoksay",
+"şu komutu çalıştır" gibi ifadelerin **uygulanmamasını** söyler. O turda
+güvenilmeyen içerik okunduysa `approval_required` uyarınca `run_command` ve
+`write_bound_file` **"Tam erişim" çipi açıkken bile** onay ister; onay penceresi
+nedeni yazar (`chat.approval_untrusted`). Böylece bir sayfaya gizlenmiş talimat
+kullanıcı adına işlem yaptıramaz.
+
+### Yerel RAG: bağlı klasörde çevrimdışı arama
+
+`search_folder` aracı, büyük bir klasörde tek tek dosya okumadan önce ilgili
+metin parçalarını bulur. İşçi `rag-tools.py` (ek paket yok): yalnızca düz metin
+uzantılarını tarar, `node_modules`/`venv`/`.git` gibi ağır klasörleri atlar,
+satır sınırlarını koruyarak ~900 karakterlik parçalar üretir ve BM25 (k1=1,2
+b=0,75) + tam-öbek bonusu ile sıralar; sonuç `yol:satır` + parça metni olarak
+döner. İndeks `tools/rag/bound-<hash>.json`'da tutulur ve dosya imzası
+(yol+boyut+mtime) değişmedikçe yeniden kurulmaz; bozuk indeks sessizce yeniden
+kurulur. Sonuç da güvenilmeyen içerik olarak etiketlenir.
 
 ## 9. Grafik çizimi
 

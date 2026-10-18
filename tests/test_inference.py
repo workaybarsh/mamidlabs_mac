@@ -163,7 +163,7 @@ def test_write_tool_requires_approval_and_denial_is_recorded(tmp_path):
     )
     calls = []
 
-    def deny(name, args):
+    def deny(name, args, reason=""):
         calls.append(name)
         return False
 

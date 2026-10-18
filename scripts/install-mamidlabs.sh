@@ -286,7 +286,8 @@ for item in profile.files:
         continue
     payload = {"action": "download", "repo": item.repo, "revision": item.revision,
                "filename": item.filename, "target": str(target),
-               "bytes": item.bytes, "mtpRepo": item.mtp_repo}
+               "bytes": item.bytes, "sha256": item.sha256,
+               "mtp": ({"repo": item.mtp_repo} if item.mtp_repo else None)}
     result = runner.run("hf-hub.py", payload, env_name="app", timeout=7200)
     if result.get("error"):
         print(f"HATA {item.target}: {result['error']}")

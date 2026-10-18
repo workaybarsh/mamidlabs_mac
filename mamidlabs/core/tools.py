@@ -17,6 +17,7 @@ Gating rules preserved from the Windows edition:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -236,6 +237,13 @@ class ToolRegistry:
                 "read_bound_file", "Bağlı klasördeki bir dosyayı okur.",
                 _params({"relative_path": _str("Dosya yolu.")}, ["relative_path"]),
                 handler=self._read_bound_file),
+            "search_folder": ToolSpec(
+                "search_folder", "Bağlı klasörde anahtar sözcüklerle yerel (çevrimdışı) arama "
+                "yapar ve en ilgili metin parçalarını dosya yolu + satır numarasıyla döndürür. "
+                "Büyük klasörlerde tek tek dosya okumadan önce nerede arayacağını bulmak için kullan.",
+                _params({"query": _str("Arama sorgusu."),
+                         "top_k": {"type": "integer", "description": "Sonuç sayısı (1-12)."}},
+                        ["query"]), handler=self._search_folder),
             "write_bound_file": ToolSpec(
                 "write_bound_file", "Bağlı klasöre dosya yazar.",
                 _params({"relative_path": _str("Dosya yolu."),
@@ -281,8 +289,13 @@ class ToolRegistry:
             names.append("create_document")
         if agent:
             names.append("ask_model")
-            if not has_audio:
-                names += ["list_bound_files", "read_bound_file", "write_bound_file"]
+            # Ses eki olan turda bağlı-klasör DOSYA araçları sunulmaz: ses zaten
+            # döküm olarak son kullanıcı mesajına eklenir; aksi halde küçük model
+            # ses DOSYASINI aramaya/okumaya/yazmaya kalkıp turları boşa harcar.
+            # Kullanıcı açıkça dosya isterse (is_file_intent) araçlar sunulur.
+            if not has_audio or is_file_intent(message):
+                names += ["list_bound_files", "read_bound_file", "search_folder",
+                          "write_bound_file"]
         if is_command_intent(message):
             names.append("run_command")
         return [self._specs[n].definition() for n in names if n in self._specs]
@@ -414,6 +427,45 @@ class ToolRegistry:
         except OSError as exc:
             return json.dumps({"error": str(exc)}, ensure_ascii=False)
         return json.dumps({"path": str(target), "text": text[:60000]}, ensure_ascii=False)
+
+    def _search_folder(self, args: dict) -> str:
+        root = self._bound_root()
+        if not root or not root.is_dir():
+            return json.dumps({"error": "bağlı klasör ayarlı değil."}, ensure_ascii=False)
+        query = str(args.get("query", "")).strip()
+        if not query:
+            return json.dumps({"error": "query gerekli."}, ensure_ascii=False)
+        try:
+            top = int(args.get("top_k", 6) or 6)
+        except (TypeError, ValueError):
+            top = 6
+        top = max(1, min(12, top))
+        payload = {"action": "search", "root": str(root), "query": query,
+                   "top": top, "store": str(self._rag_store(root))}
+        result = self.runner.run("rag-tools.py", payload, timeout=180)
+        if not isinstance(result, dict) or result.get("error"):
+            message = result.get("error") if isinstance(result, dict) else str(result)
+            return f"Arama hatası: {message}"
+        hits = result.get("hits") or []
+        files = result.get("files", 0)
+        chunks = result.get("chunks", 0)
+        if not hits:
+            note = result.get("message") or "Eşleşme yok."
+            return f"{note} ({files} dosya, {chunks} parça tarandı)"
+        blocks = [f"[{hit.get('path')}:{hit.get('line')}]\n{hit.get('text')}"
+                  for hit in hits]
+        return (f"Bağlı klasörde '{query}' için en ilgili parçalar "
+                f"({files} dosya, {chunks} parça tarandı):\n\n" + "\n\n".join(blocks))
+
+    def _rag_store(self, root: Path) -> Path:
+        """RAG index path under ``tools/rag`` (bound-<hash8>.json).
+
+        The path is hashed as-is. macOS volumes are usually case-insensitive but
+        the string is kept verbatim (mirrors the Linux edition, whose paths are
+        case-sensitive).
+        """
+        tag = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:8]
+        return self.paths.rag / f"bound-{tag}.json"
 
     def _write_bound_file(self, args: dict) -> str:
         target = self._resolve_bound(str(args.get("relative_path", "")))

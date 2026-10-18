@@ -37,6 +37,9 @@ class CatalogFile:
     revision: str
     filename: str
     bytes: int
+    #: Optional pinned SHA256 for offline verification (see ``hf-hub.py``); when
+    #: empty the downloader asks the Hub for the LFS digest instead.
+    sha256: str = ""
     #: Optional MTP header source (see ``mtp_inject.py``); only the LITE GGUF
     #: loses its ``nextn`` block during conversion and needs it re-injected.
     mtp_repo: str = ""
@@ -77,8 +80,8 @@ class Profile:
 
 
 def _f(label: str, target: str, repo: str, revision: str, filename: str, size: int,
-       mtp_repo: str = "") -> CatalogFile:
-    return CatalogFile(label, target, repo, revision, filename, size, mtp_repo)
+       mtp_repo: str = "", sha256: str = "") -> CatalogFile:
+    return CatalogFile(label, target, repo, revision, filename, size, sha256, mtp_repo)
 
 
 # --- language models ---------------------------------------------------------

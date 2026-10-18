@@ -10,6 +10,33 @@ Sürümün tek kaynağı `mamidlabs/__init__.py` içindeki `__version__` ve
 ## [1.0.0] — 2026-10-16
 
 ### Eklendi
+- **Profil indirmelerinde SHA256 doğrulaması ve yarım indirmeyi sürdürme.** `mamidlabs/workers/
+  hf-hub.py` indirilen dosyanın SHA256 özetini Hugging Face'in LFS özetiyle karşılaştırır
+  (katalogda isteğe bağlı `sha256` alanı varsa çevrimdışı da); özet uyuşmazsa dosya **silinir** ve
+  net hata verilir, sessizce bozuk model kalmaz. Doğrulama MTP enjeksiyonundan **önce** yapılır
+  (enjeksiyon dosyayı değiştirir). Yarım kalan indirme `hf_hub_download` tarafından kaldığı
+  yerden sürdürülür ve işçi bunu durum satırında bildirir. Testler:
+  `tests/test_model_download_integrity.py`.
+- **Otomatik çaba: sorunun zorluğuna göre MAX/FLASH davranışı (model yeniden yüklenmeden).**
+  MAX ve FLASH aynı model olduğundan, profil değiştirmek yerine o tur için `reasoning_effort`
+  istek başına verilir: kısa soru/selamlama `low`, orta `medium`, çok adımlı matematik/kod/analiz
+  `xhigh`. Seçim tur başında bir kez yapılır ve tur boyunca sabit kalır (KV öneki bozulmaz).
+  Profiller menüsündeki **"Otomatik çaba (soruya göre)"** ile kapatılabilir
+  (`settings/api.json → autoEffort`). LITE'ta ve API sağlayıcılarında uygulanmaz.
+  Testler: `tests/test_auto_effort.py`.
+- **Prompt injection sertleştirmesi.** Web sayfası, belge, OCR ve bağlı dosya içeriği modele
+  `[GÜVENİLMEYEN İÇERİK …]` etiketiyle **veri** olarak verilir; sabit sistem istemi içerikteki
+  talimatların uygulanmamasını söyler. O turda güvenilmeyen içerik okunduysa **"Tam erişim"
+  çipinde bile** `run_command` ve `write_bound_file` için onay istenir (`approval_required`),
+  böylece içeriğe gizlenmiş bir talimat kullanıcı adına işlem yaptıramaz. Testler:
+  `tests/test_prompt_injection.py`.
+- **Yerel RAG: bağlı klasörde çevrimdışı (BM25) arama.** Yeni `search_folder` aracı, bağlı
+  klasörde tek tek dosya okumadan önce ilgili metin parçalarını bulur:
+  `mamidlabs/workers/rag-tools.py` düz metin dosyalarını tarar (`node_modules`/`venv`/`.git`
+  atlanır), satır sınırlarını koruyan ~900 karakterlik parçalar üretir ve BM25 + tam öbek
+  bonusuyla sıralar; sonuç `yol:satır` biçiminde döner. İndeks `tools/rag/` altında tutulur ve
+  kaynak dosyalar değişmedikçe yeniden kurulmaz; ek Python paketi gerekmez. Sonuç, diğer dış
+  kaynaklar gibi **güvenilmeyen veri** olarak etiketlenir. Testler: `tests/test_rag_tools.py`.
 - **GitHub Actions yayın iş akışı (`.dmg`).** `v*` etiketi itildiğinde `.dmg`
   paketi derlenir ve **sabit adla** (`MamidLabs.dmg`) GitHub Release'e yüklenir;
   böylece `releases/latest/download/MamidLabs.dmg` her zaman en son sürümü
@@ -36,7 +63,9 @@ Sürümün tek kaynağı `mamidlabs/__init__.py` içindeki `__version__` ve
 - `install-mamidlabs.sh --language tr|en` (ayar dosyasına yazar), sihirbaz için
   ilerleme (`logs/kurulum-adim.txt`) ve özet (`logs/kurulum-ozeti.txt`) dosyaları.
 - Yeni testler: `test_hwinfo.py`, `test_wizard.py` (saf), `test_wizard_gui.py`
-  (başsız Qt), `test_i18n.py`, `test_packaging_contract.py` (toplam 158 test).
+  (başsız Qt), `test_i18n.py`, `test_packaging_contract.py`,
+  `test_model_download_integrity.py`, `test_auto_effort.py`,
+  `test_prompt_injection.py`, `test_rag_tools.py` (toplam 207 test).
 - **MamidLabs macOS sürümü.** Windows sürümünün (`MamidLabsTR` / `MamidLabsENG`)
   tam macOS portu: WinForms/PowerShell yerine tek dilde **Python 3.12 + PySide6
   (Qt6)** masaüstü uygulaması.

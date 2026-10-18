@@ -50,6 +50,10 @@ DEFAULTS: dict[str, Any] = {
     "audioEvents": True,
     # MTP (speculative decoding) is on unless the user disables it.
     "mtp": True,
+    # MAX and FLASH are the same model; only the server's --reasoning-effort
+    # differs. Picking the effort per request (from the question's difficulty)
+    # avoids reloading the model (~15 s). Toggle: menu -> "Otomatik çaba".
+    "autoEffort": True,
     "theme": "system",
     # Interface language chosen in the setup wizard (tr | en). The app reads it
     # on start; changing it in the menu writes it back and retranslates live.

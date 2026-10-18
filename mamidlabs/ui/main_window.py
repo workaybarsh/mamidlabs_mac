@@ -26,7 +26,7 @@ from .theme import STYLESHEET
 
 class TurnWorker(QThread):
     event = Signal(dict)
-    approval_needed = Signal(str, dict)
+    approval_needed = Signal(str, dict, str)
 
     def __init__(self, engine: InferenceEngine, history: list[dict], **kwargs) -> None:
         super().__init__()
@@ -44,10 +44,10 @@ class TurnWorker(QThread):
     def cancel(self) -> None:
         self._cancelled.set()
 
-    def _approve(self, name: str, arguments: dict) -> bool:
+    def _approve(self, name: str, arguments: dict, reason: str = "") -> bool:
         self._approval_result = None
         self._approval_lock.clear()
-        self.approval_needed.emit(name, arguments)
+        self.approval_needed.emit(name, arguments, reason)
         # Wait up to 10 minutes; default to deny on timeout (as on Windows).
         self._approval_lock.wait(600)
         return bool(self._approval_result)
@@ -129,6 +129,15 @@ class MainWindow(QMainWindow):
             self.language_menu.addAction(action)
             self.language_actions[code] = action
 
+        # Profiller menüsü: MAX/FLASH'ta çaba istek başına seçilsin (model
+        # yeniden yüklenmesin). Kapatılırsa sunucunun profil değeri kullanılır.
+        self.profiles_menu = menu.addMenu("")
+        self.auto_effort_action = QAction(self)
+        self.auto_effort_action.setCheckable(True)
+        self.auto_effort_action.setChecked(bool(self.settings.get("autoEffort", True)))
+        self.auto_effort_action.toggled.connect(self._on_auto_effort_toggled)
+        self.profiles_menu.addAction(self.auto_effort_action)
+
         self.quit_action = QAction(self)
         self.quit_action.triggered.connect(self.close)
         menu.addAction(self.quit_action)
@@ -167,8 +176,14 @@ class MainWindow(QMainWindow):
         self.internet_chip = QCheckBox()
         self.agent_chip = QCheckBox()
         self.access_chip = QCheckBox()
+        # Çip durumu ayarlardan gelir. "Tam erişim" varsayılanı KAPALI'dır:
+        # yazma/çalıştırma araçları kullanıcı onayı ister (güvenli varsayılan).
+        prefs = self.settings.get("uiPreferences") or {}
+        self.internet_chip.setChecked(bool(prefs.get("internet", True)))
+        self.agent_chip.setChecked(bool(prefs.get("agent", True)))
+        self.access_chip.setChecked(bool(prefs.get("accessMode", False)))
         for chip in (self.internet_chip, self.agent_chip, self.access_chip):
-            chip.setChecked(True)
+            chip.toggled.connect(self._save_chips)
             chips.addWidget(chip)
         chips.addStretch(1)
         layout.addLayout(chips)
@@ -203,6 +218,8 @@ class MainWindow(QMainWindow):
         self.language_menu.setTitle(i18n.t("ui.menu.language"))
         self.language_actions["tr"].setText("Türkçe")
         self.language_actions["en"].setText("English")
+        self.profiles_menu.setTitle(i18n.t("ui.menu.profiles"))
+        self.auto_effort_action.setText(i18n.t("ui.menu.auto_effort"))
         self.profile_label.setText(i18n.t("ui.label.profile"))
         self.provider_label.setText(i18n.t("ui.label.provider"))
         self.model_label.setText(i18n.t("ui.label.model"))
@@ -229,6 +246,19 @@ class MainWindow(QMainWindow):
         profile = PROFILE_IDS[self.profile_box.currentIndex()] \
             if self.profile_box.currentIndex() < len(PROFILE_IDS) else "max"
         self.settings.local_profile = profile
+        self.settings.save()
+
+    def _on_auto_effort_toggled(self, checked: bool) -> None:
+        self.settings["autoEffort"] = bool(checked)
+        self.settings.save()
+
+    def _save_chips(self, _checked: bool = False) -> None:
+        """Persist the intent/access chips (access is off by default)."""
+        self.settings["uiPreferences"] = {
+            "internet": self.internet_chip.isChecked(),
+            "agent": self.agent_chip.isChecked(),
+            "accessMode": self.access_chip.isChecked(),
+        }
         self.settings.save()
 
     def _current_profile(self) -> str:
@@ -329,11 +359,16 @@ class MainWindow(QMainWindow):
         self.stop_turn_button.setEnabled(False)
         self.statusBar().showMessage(i18n.t("ui.status.ready"))
 
-    def _on_approval(self, name: str, arguments: dict) -> None:
+    def _on_approval(self, name: str, arguments: dict, reason: str = "") -> None:
         preview = json.dumps(arguments, ensure_ascii=False, indent=2)[:1200]
+        body = i18n.t("ui.approval.question", name=html.escape(name),
+                      preview=html.escape(preview))
+        if reason:
+            # Untrusted content was read this turn: tell the user why we ask
+            # even though the "full access" chip may be on.
+            body += "<br><br><i>" + html.escape(reason) + "</i>"
         answer = QMessageBox.question(
-            self, i18n.t("ui.approval.title"),
-            i18n.t("ui.approval.question", name=html.escape(name), preview=html.escape(preview)),
+            self, i18n.t("ui.approval.title"), body,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if self.worker:
             self.worker.resolve_approval(answer == QMessageBox.StandardButton.Yes)
