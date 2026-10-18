@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from mamidlabs.core.inference import (InferenceEngine, build_job_messages,
-                                      compact_turn_messages, estimate_tokens,
-                                      strip_fabricated_citations)
+from mamidlabs.core.inference import (CONTEXT_SAFETY_MARGIN, InferenceEngine,
+                                      build_job_messages, compact_turn_messages,
+                                      estimate_tokens, strip_fabricated_citations)
 from mamidlabs.core.paths import Paths
 from mamidlabs.core.settings import SecretStore, Settings
 
@@ -43,6 +43,19 @@ class StubRegistry:
 
     def call(self, name, arguments):
         return self.results.get(name, json.dumps({"ok": True}))
+
+
+class RecordingStream(FakeStream):
+    """FakeStream that also keeps every request body (to inspect the prompt)."""
+
+    def __init__(self, turns):
+        super().__init__(turns)
+        self.bodies: list[dict] = []
+
+    def __call__(self, provider, body, settings, key="", *, claude_state=None, replay=None):
+        self.bodies.append(body)
+        yield from super().__call__(provider, body, settings, key,
+                                    claude_state=claude_state, replay=replay)
 
 
 def _settings(tmp_path):
@@ -99,6 +112,65 @@ def test_compact_no_change_when_fits():
     compacted, changed = compact_turn_messages(messages, context_limit=32768, max_tokens=8192)
     assert changed is False
     assert compacted == messages
+
+
+def test_compact_reports_no_change_when_nothing_shortenable():
+    # Over budget but the only message is the user's own (never shortened):
+    # the function must not claim it changed anything.
+    messages = [{"role": "user", "content": "u" * 40000}]
+    compacted, changed = compact_turn_messages(messages, context_limit=4096, max_tokens=1024)
+    assert changed is False
+    assert compacted == messages
+
+
+def test_compact_many_tool_outputs_fits_after_marker_pass():
+    # Truncating to 800 chars is not enough on its own: the second (marker) pass
+    # must bring a long tool-heavy turn under budget without dropping messages.
+    messages = [{"role": "system", "content": "s" * 200}]
+    for index in range(30):
+        messages.append({"role": "assistant", "content": None,
+                         "tool_calls": [{"id": f"t{index}", "type": "function",
+                                         "function": {"name": "read_bound_file",
+                                                      "arguments": "{}"}}]})
+        messages.append({"role": "tool", "tool_call_id": f"t{index}",
+                         "name": "read_bound_file", "content": "z" * 5000})
+    context_limit, max_tokens = 8192, 1024
+    budget = max(256, context_limit - max_tokens - CONTEXT_SAFETY_MARGIN)
+    compacted, changed = compact_turn_messages(messages, context_limit, max_tokens)
+    assert changed is True
+    assert estimate_tokens(compacted) <= budget
+    assert len(compacted) == len(messages)  # nothing deleted
+    ids_calls = [c["id"] for m in compacted for c in (m.get("tool_calls") or [])]
+    ids_tools = [m["tool_call_id"] for m in compacted if m.get("role") == "tool"]
+    assert ids_calls == ids_tools  # tool_calls / tool pairing stays valid
+
+
+def test_run_turn_no_compact_event_when_prompt_fits(tmp_path):
+    engine, stream = _engine(tmp_path, [[_text_chunk("Merhaba")]])
+    events = list(engine.run_turn([{"role": "user", "content": "selam"}]))
+    assert [e["kind"] for e in events if e["kind"] == "compact"] == []
+    assert stream.calls == 1
+
+
+def test_run_turn_overflow_forces_final_answer_and_clamps_tokens(tmp_path):
+    registry = StubRegistry([Spec("search_web")], {})
+    stream = RecordingStream([[_text_chunk("Elimdeki bulgularla: ...")]])
+    engine = InferenceEngine(Paths(tmp_path), _settings(tmp_path), registry,
+                             stream_fn=stream)
+    engine.settings["contextLimit"] = 8192
+    history = [{"role": "user", "content": "u" * 40000}]  # cannot be shortened
+    events = list(engine.run_turn(history, max_tokens=1024))
+    assert any(e["kind"] == "status" and "bağlam" in e["text"].lower()
+               for e in events)
+    body = stream.bodies[0]
+    assert "tools" not in body                 # tools dropped, no overflow error
+    assert body["max_tokens"] == 256           # clamped to the remaining room
+    note = body["messages"][-1]
+    assert note["role"] == "user" and "[Sistem notu]" in note["content"]
+    assert events[-1]["kind"] == "done"
+    # The forced-answer note lives only in the request copy, not in history.
+    assert not any("[Sistem notu]" in str(m.get("content"))
+                   for m in events[-1]["data"])
 
 
 def test_strip_fabricated_citations():

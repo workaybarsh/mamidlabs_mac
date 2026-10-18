@@ -89,6 +89,16 @@ Sürümün tek kaynağı `mamidlabs/__init__.py` içindeki `__version__` ve
   okunur (`__file__`'dan türetilmez).
 - Birim testleri (`pytest`); bellek kapısı ve platforma duyarlı yol testleri dahil.
 
+### Düzeltildi
+- **Uzun sohbette bağlam taşması artık zarifçe karşılanır (Windows paritesi).** Sıkıştırma iki
+  geçişli oldu: önce en eski araç çıktılarının yalnızca başı korunur, yetmezse en eski araç
+  çıktıları ve eski asistan metni kısa bir işaretle değiştirilir (mesaj silinmez,
+  `tool_calls`/`tool` eşleşmesi bozulmaz). İstem hâlâ sığmıyorsa araçlar hiç sunulmaz ve
+  modelden **eldeki bulgularla görünür yanıt** istenir (`llama-server --no-context-shift`
+  kullanıldığından taşan istem sert hata verirdi). Çıktı bütçesi (`max_tokens`) kalan odaya
+  göre kısılır ve yalnızca gerçekten bir şey kısaldıysa "Bağlam sınırına yaklaşıldı" notu
+  gösterilir (boşuna yanıltıcı not verilmez). Testler: `tests/test_inference.py`.
+
 ### Değişti (Windows sürümüne göre)
 - Windows **DPAPI** yerine macOS **Keychain** / `0600` dosya.
 - Windows **PowerShell 7 gömülü çalışma zamanı** yerine sistem Python'u

@@ -179,24 +179,50 @@ def build_job_messages(system_prompt: str, history: list[dict]) -> list[dict]:
 
 def compact_turn_messages(messages: list[dict], context_limit: int,
                           max_tokens: int) -> tuple[list[dict], bool]:
-    """Shorten the oldest tool outputs when the prompt would overflow.
+    """Shorten old content when the prompt would overflow the context.
 
-    Returns ``(messages, compacted)``. Messages are never removed: the
-    ``assistant.tool_calls`` / ``tool`` pairing must stay valid.
+    Two passes, mirroring the Windows worker: first only the *head* of the
+    oldest tool outputs is kept (most of the value is at the top), and if the
+    prompt still does not fit the oldest tool outputs and old assistant text are
+    replaced with a short marker. Messages are never removed, so the
+    ``assistant.tool_calls`` / ``tool`` pairing stays valid and the server keeps
+    accepting the request.
+
+    Returns ``(messages, compacted)``; ``compacted`` is True only when something
+    was actually shortened (the status note must not lie).
     """
     budget = max(256, context_limit - max_tokens - CONTEXT_SAFETY_MARGIN)
     if estimate_tokens(messages) <= budget:
         return messages, False
     result = [dict(m) for m in messages]
-    for message in result:
+    trimmed = 0
+    # 1) Keep only the head of the oldest tool outputs.
+    for index, message in enumerate(result):
+        if index == 0:
+            continue
+        if estimate_tokens(result) <= budget:
+            break
         if message.get("role") != "tool":
             continue
         content = message.get("content")
         if isinstance(content, str) and len(content) > 800:
             message["content"] = content[:800] + i18n.t("chat.truncated")
-            if estimate_tokens(result) <= budget:
-                return result, True
-    return result, True
+            trimmed += 1
+    # 2) Still over budget: replace the oldest tool outputs and old assistant
+    #    text with a short marker (``tool_calls`` is preserved).
+    marker = i18n.t("chat.trimmed")
+    for index, message in enumerate(result):
+        if index == 0:
+            continue
+        if estimate_tokens(result) <= budget:
+            break
+        if message.get("role") not in ("tool", "assistant"):
+            continue
+        content = message.get("content")
+        if isinstance(content, str) and len(content) > len(marker):
+            message["content"] = marker
+            trimmed += 1
+    return result, trimmed > 0
 
 
 # --- streaming accumulation --------------------------------------------------
@@ -302,18 +328,43 @@ class InferenceEngine:
             effort = auto_reasoning_effort(message_text)
 
         for _round in range(MAX_TOOL_ROUNDS):
-            messages, compacted = compact_turn_messages(messages, context_limit, max_tokens)
-            if compacted:
-                yield {"kind": "compact", "text": "Bağlam sınırına yaklaşıldı; eski araç "
-                                                  "çıktıları kısaltıldı."}
-            tool_defs = self.registry.definitions(
+            # F1: keep the turn inside the context window. Shorten old content;
+            # if the prompt still does not fit, stop offering tools and ask for a
+            # visible answer from the findings (llama-server runs with
+            # --no-context-shift, so an overflowing prompt would be a hard error).
+            prompt_tokens = estimate_tokens(messages)
+            force_final = False
+            if prompt_tokens + max_tokens + CONTEXT_SAFETY_MARGIN > context_limit:
+                messages, compacted = compact_turn_messages(messages, context_limit,
+                                                            max_tokens)
+                prompt_tokens = estimate_tokens(messages)
+                if prompt_tokens + 256 + CONTEXT_SAFETY_MARGIN > context_limit:
+                    force_final = True
+                    yield {"kind": "status", "text": i18n.t("chat.context_full")}
+                elif compacted:
+                    yield {"kind": "compact", "text": i18n.t("chat.compact")}
+            tool_defs = [] if force_final else self.registry.definitions(
                 chips=chips, message=message_text, has_documents=has_documents,
                 has_audio=has_audio, profile_lite=(profile == "lite"),
                 web=web, web_locked=web.should_lock_tools)
 
+            # F2: cap the completion budget to the room left in the context
+            # (local/custom endpoints only; remote APIs keep their ceiling).
+            send_tokens = max_tokens
+            if provider in ("", "local", "custom"):
+                send_tokens = min(max_tokens,
+                                  max(256, context_limit - prompt_tokens
+                                      - CONTEXT_SAFETY_MARGIN))
+            # The forced-answer note lives only in the request copy, never in the
+            # persistent history (the client prefix must match the server's).
+            send_messages = messages
+            if force_final:
+                send_messages = messages + [{"role": "user",
+                                             "content": i18n.t("chat.context_full_note")}]
+
             result: TurnResult | None = None
-            for event in self.complete(messages, provider=provider, model=model,
-                                       tool_defs=tool_defs, max_tokens=max_tokens,
+            for event in self.complete(send_messages, provider=provider, model=model,
+                                       tool_defs=tool_defs, max_tokens=send_tokens,
                                        reasoning_effort=effort,
                                        claude_state=claude_state,
                                        replay=(claude_state.replay if claude_state else None)):

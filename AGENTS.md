@@ -62,7 +62,7 @@ ve araç kümesi Windows sürümüyle birebir tutulur.
 | `packaging/macos/Info.plist`, `packaging/macos/MacOS-MamidLabsSetup` | sihirbaz `.app` şablonları |
 | `packaging/mamidlabs.png`, `packaging/mamidlabs.svg` | Simge (`.icns` derlemede üretilir) |
 | `requirements/{app,imagegen,asr,ocr}.txt` | Python paketleri (sabit sürümler) |
-| `tests/` | pytest (207 test; PySide6 gerektirmez) |
+| `tests/` | pytest (211 test; PySide6 gerektirmez) |
 | `docs/` | `kurulum.md`, `teknik-notlar.md` |
 | `.github/workflows/tests.yml` | CI (macos-latest, Python 3.12) |
 | `.github/workflows/kurulum-paketi.yml` | Yayın: `v*` etiketinde `.dmg` derler, sabit adla (`MamidLabs.dmg`) GitHub Release'e yükler |
@@ -211,8 +211,14 @@ Model yüklenmeden önce artık GPU işçileri (`stop_orphan_workers`) kapatıl�
    `data` alanında taşır; arayüz bunları kalıcı geçmişe ekler. Bu yapılmazsa
    sonraki turda istemci öneki sunucununkinden farklı olur ve bağlam baştan
    işlenir.
-7. Bağlam eşiğine yaklaşılınca `compact_turn_messages` en eski araç çıktılarını
-   kısaltır (mesaj silinmez; `tool_calls`/`tool` eşleşmesi bozulmaz).
+7. **Bağlam koruması** (Windows paritesi): tur başında tahmini istem +
+   `max_tokens` + pay bağlamı aşacaksa `compact_turn_messages` **iki geçişle**
+   kısaltır — önce en eski araç çıktılarının yalnızca başı, yetmezse en eski araç
+   çıktıları ve eski asistan metni kısa bir işaretle değiştirilir (mesaj silinmez;
+   `tool_calls`/`tool` eşleşmesi korunur). **Hâlâ sığmıyorsa** araçlar
+   **sunulmaz** ve modelden eldeki bulgularla görünür yanıt istenir
+   (`chat.context_full`); `max_tokens` kalan odaya göre kısılır. "Sıkıştırıldı"
+   durum notu yalnızca gerçekten bir şey kısaldıysa gösterilir.
 
 ### Web başarısızlığı dürüstlüğü
 
@@ -327,7 +333,7 @@ Sohbetler `chats/` altında saklanır. `logs/audit.jsonl`: araç çağrıları k
 
 ```bash
 python3 -m pip install pytest -r requirements/app.txt
-python3 -m pytest -q          # 207 test; PySide6 gerektirmez (yalnızca sihirbaz penceresi testleri)
+python3 -m pytest -q          # 211 test; PySide6 gerektirmez (yalnızca sihirbaz penceresi testleri)
 ./scripts/smoke-test.sh --profile flash
 ```
 
@@ -465,6 +471,7 @@ Her özellik/değişiklik için bir satır ekle (en yeni üstte).
 
 | Tarih | Değişiklik | Dosyalar |
 |---|---|---|
+| 2026-10-18 | **Bağlam sıkıştırma: uzun sohbette taşma zarifçe karşılanır (Windows paritesi).** Sıkıştırma iki geçişli (önce araç çıktısının başı, yetmezse araç/assistant metni kısa işaretle değiştirilir; mesaj silinmez, `tool_calls`/`tool` eşleşmesi korunur). İstem hâlâ sığmıyorsa araçlar sunulmaz, modelden eldeki bulgularla görünür yanıt istenir ve `max_tokens` kalan odaya kısılır; "sıkıştırıldı" durum notu yalnızca gerçekten kısaldıysa gösterilir. | mamidlabs/core/inference.py, mamidlabs/locales/{tr,en}.json, tests/test_inference.py, AGENTS.md, CHANGELOG.md, docs/teknik-notlar.md |
 | 2026-10-18 | **Bağlı klasörde yerel (çevrimdışı) RAG: `search_folder` aracı.** Yeni işçi `rag-tools.py` bağlı klasörü tarayıp BM25 (k1=1.2, b=0.75 + 1.6× tam-ifade bonusu) ile en ilgili metin parçalarını `[dosya:satır]` biçiminde döndürür; indeks `tools/rag/bound-<hash>.json`'da dosya imzasıyla (yol+mtime+boyut) önbelleklenir, bozulursa sessizce yeniden kurulur. `node_modules`/`.git`/`venv` gibi klasörler ve ikili/çok büyük dosyalar atlanır; kod çözme utf-8 → cp1254 → latin-1. Araç, bağlı-klasör dosya araçlarıyla aynı kapıdan geçer (ses turunda sunulmaz; `is_file_intent` ise sunulur) ve **güvenilmeyen** sayılır. | mamidlabs/workers/rag-tools.py, mamidlabs/core/tools.py, mamidlabs/core/paths.py, tests/test_rag_tools.py |
 | 2026-10-18 | **İstem enjeksiyonuna karşı sertleştirme.** `search_web`/`fetch_page`/`read_document`/`read_images_ocr`/`read_bound_file`/`search_folder` sonuçları modele `chat.untrusted_prefix` etiketiyle sunulur; sistem istemi (`prompt.untrusted`) bu içeriğin **talimat değil veri** olduğunu söyler. O turda güvenilmeyen içerik okunduysa `run_command`/`write_bound_file` "Tam erişim" çipi açıkken bile onay ister (`inference.approval_required`); onay penceresi nedeni yazar (`chat.approval_untrusted`). | mamidlabs/core/inference.py, mamidlabs/ui/main_window.py, mamidlabs/locales/*, tests/test_prompt_injection.py |
 | 2026-10-18 | **Otomatik çaba (MAX/FLASH için istek başına).** MAX ve FLASH aynı model olduğundan, `Profiller → "Otomatik çaba (soruya göre)"` açıkken (`api.json:autoEffort`, varsayılan `true`) `inference.auto_reasoning_effort` tur başına `low`/`medium`/`xhigh` seçer ve istek gövdesine `chat_template_kwargs.reasoning_effort` olarak konur (yalnızca yerel sağlayıcı; LITE şablonu yok sayar). Seçim tur boyunca sabit → model yeniden yüklenmez, KV öneki bozulmaz. | mamidlabs/core/inference.py, mamidlabs/core/settings.py, mamidlabs/ui/main_window.py, mamidlabs/locales/*, tests/test_auto_effort.py |

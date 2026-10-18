@@ -134,9 +134,14 @@ Tek tablo `providers.py` içindedir: `openai`, `claude`, `gemini`, `deepseek`,
 - `done` olayı o turda eklenen `assistant.tool_calls` ve `tool` mesajlarını da
   taşır; arayüz bunları kalıcı geçmişe ekler (eklenmezse sonraki turda istemci
   öneki sunucununkinden farklı olur ve bağlam baştan işlenir).
-- Bağlam eşiğine yaklaşılınca en eski araç çıktıları kısaltılır
-  (`compact_turn_messages`); mesaj silinmez, `assistant.tool_calls`/`tool`
-  eşleşmesi bozulmaz.
+- Bağlam koruması **iki aşamalıdır**: tur başında istem + `max_tokens` + pay
+  bağlamı aşacaksa `compact_turn_messages` önce en eski araç çıktılarının yalnızca
+  başını korur, yetmezse en eski araç çıktılarını ve eski asistan metnini kısa bir
+  işaretle değiştirir. **İstem hâlâ sığmıyorsa** araçlar sunulmaz ve modelden
+  eldeki bulgularla yanıt istenir, `max_tokens` kalan odaya göre kısılır
+  (`llama-server --no-context-shift` yüzünden taşan istem sert hata verir). Hiçbir
+  şey kısalmadıysa "sıkıştırıldı" notu verilmez; `assistant.tool_calls`/`tool`
+  eşleşmesi hiçbir durumda bozulmaz.
 
 ### Web başarısızlığı dürüstlüğü
 
