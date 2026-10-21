@@ -503,7 +503,7 @@ def main():
     action = req.get('action')
     handler = ACTIONS.get(action)
     if not handler:
-        print(json.dumps({'error': 'bilinmeyen islem: %s' % action}, ensure_ascii=False))
+        print(json.dumps({'error': 'unknown action: %s' % action}, ensure_ascii=False))
         return
     try:
         print(json.dumps(handler(req), ensure_ascii=False))

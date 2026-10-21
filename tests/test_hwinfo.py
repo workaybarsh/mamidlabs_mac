@@ -62,7 +62,7 @@ def test_warning_keys_exist_in_the_catalogs():
         for report in (hwinfo.Report(), hwinfo.Report(ram_mib=16 * 1024, apple_silicon=True,
                                                       free_gib=1.0)):
             for key in hwinfo.warnings(report):
-                assert key in catalog, f"{code}.json eksik: {key}"
+                assert key in catalog, f"{code}.json is missing: {key}"
 
 
 def test_measure_never_raises(tmp_path):

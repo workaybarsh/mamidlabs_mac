@@ -298,7 +298,7 @@ def inject_into_gguf(target, tensors, emit=print):
         pad = (ALIGN - fout.tell() % ALIGN) % ALIGN
         fout.write(b'\x00' * pad)
         new_data_start = fout.tell()
-        # Ana veri blogunu dokunmadan kopyala.
+        # Copy the main data block without touching it.
         fin.seek(data_start)
         remaining = old_data_size
         chunk = 16 * 1024 * 1024
@@ -308,7 +308,7 @@ def inject_into_gguf(target, tensors, emit=print):
                 break
             fout.write(data)
             remaining -= len(data)
-        # MTP tensorlerini yaz.
+        # Write the MTP tensors.
         for off, info, gtype, nbytes in blobs:
             want = new_data_start + off
             cur = fout.tell()
@@ -320,7 +320,7 @@ def inject_into_gguf(target, tensors, emit=print):
             else:
                 data = _to_f16_bytes(info['raw'], info['dtype'])
             if len(data) != nbytes:
-                raise RuntimeError('tensor boyutu uyusmuyor')
+                raise RuntimeError('tensor size mismatch')
             fout.write(data)
     os.replace(tmp, target)
     emit(f'MTP header added ({len(new_tensors)} tensors).')
