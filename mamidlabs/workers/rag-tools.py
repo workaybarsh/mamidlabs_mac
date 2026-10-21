@@ -1,11 +1,11 @@
-"""Bağlı klasör için yerel (çevrimdışı) sözlük araması — BM25.
+"""Local (offline) dictionary search for the bound folder — BM25.
 
-Model büyük bir klasörde ilgili parçaları bulmak için önce tüm dosyaları
-okumak zorunda kalmasın diye kullanılır. Ek paket gerektirmez; indeks
-`store` yolunda JSON olarak tutulur ve dosya imzası (yol + boyut + mtime)
-değişmedikçe yeniden kurulmaz.
+Used so the model does not have to read every file to find the relevant chunks
+in a large folder. It needs no extra package; the index is kept as JSON at the
+`store` path and is not rebuilt while the file signature (path + size + mtime)
+is unchanged.
 
-Sözleşme: stdin'den JSON istek, stdout'a tek JSON yanıt.
+Contract: JSON request on stdin, one JSON response on stdout.
   {"action": "search", "root": "...", "query": "...", "top": 6, "store": "..."}
   {"action": "index",  "root": "...", "store": "..."}
 """
@@ -16,16 +16,16 @@ import re
 import sys
 import time
 
-# Binlerce dosyalı bir klasörde (venv, node_modules, .git) gezinmemek için
-# atlanan klasör adları. Yalnızca klasör adı eşleşir, dosya adı değil.
+# Folder names skipped so a folder with thousands of files (venv, node_modules,
+# .git) is not walked. Only folder names match, not file names.
 SKIP_DIRS = {
     '.git', '.svn', '.hg', 'node_modules', 'venv', '.venv', '__pycache__',
     '.cache', '.idea', '.vscode', 'dist', 'build', 'coverage', '.pytest_cache',
     'site-packages', 'tools',
 }
 
-# Düz metin olarak aranabilen uzantılar. PDF/Word/Excel için mevcut
-# read_document aracı kullanılır (bu araç ikili dosyaları atlar).
+# Extensions searchable as plain text. For PDF/Word/Excel the existing
+# read_document tool is used (this tool skips binary files).
 TEXT_EXT = {
     '.txt', '.md', '.markdown', '.rst', '.csv', '.tsv', '.json', '.log',
     '.ps1', '.psm1', '.psd1', '.py', '.js', '.mjs', '.cjs', '.ts', '.tsx',
@@ -70,8 +70,8 @@ def _read_text(path):
         return None
     if b'\x00' in raw[:4096]:
         return None
-    # macOS'ta dosyalar ağırlıkla UTF-8'dir; eski/karışık metin için Latin-1
-    # son çaredir (cp1254 de denenir; her iki kod çözücü her platformda var).
+    # macOS files are mostly UTF-8; Latin-1 is the last resort for old/mixed text
+    # (cp1254 is tried too; both codecs exist on every platform).
     for encoding in ('utf-8', 'cp1254', 'latin-1'):
         try:
             return raw.decode(encoding)
@@ -81,7 +81,7 @@ def _read_text(path):
 
 
 def _chunk_text(text):
-    """Satır sınırlarını koruyarak ~CHUNK_CHARS'lik parçalar üretir."""
+    """Produce ~CHUNK_CHARS chunks while preserving line boundaries."""
     lines = text.splitlines()
     chunks = []
     current = []
@@ -94,7 +94,7 @@ def _chunk_text(text):
         size += len(line) + 1
         if size >= CHUNK_CHARS:
             chunks.append((start_line, '\n'.join(current)))
-            # Son iki satırı sonraki parçanın başına taşı (bağlam kopmasın).
+            # Carry the last two lines into the next chunk (keep the context).
             tail = current[-2:]
             current = list(tail)
             size = sum(len(t) + 1 for t in tail)
@@ -178,13 +178,13 @@ def search(root, query, top=6, store=None):
     terms = tokenize(query)
     if not chunks:
         return {'root': root, 'files': index.get('files', 0), 'chunks': 0,
-                'hits': [], 'message': 'Klasörde aranabilir metin dosyası yok.'}
+                'hits': [], 'message': 'There is no searchable text file in the folder.'}
     if not terms:
         return {'root': root, 'files': index.get('files', 0), 'chunks': len(chunks),
-                'hits': [], 'message': 'Arama terimi boş.'}
+                'hits': [], 'message': 'The search term is empty.'}
 
-    # Tokenlar bir kez hesaplanır: indeks metni saklar, ağırlıklar sorgu anında
-    # çıkarılır. Böylece indeks dosyası küçük kalır.
+    # Tokens are computed once: the index stores text, weights are derived at query
+    # time. This keeps the index file small.
     docs = []
     df = {}
     for chunk in chunks:
@@ -253,12 +253,12 @@ def main():
     try:
         request = json.loads(sys.stdin.read() or '{}')
     except ValueError:
-        print(json.dumps({'error': 'geçersiz JSON istek'}, ensure_ascii=False))
+        print(json.dumps({'error': 'invalid JSON request'}, ensure_ascii=False))
         return
 
     root = request.get('root') or ''
     if not root or not os.path.isdir(root):
-        print(json.dumps({'error': 'klasör bulunamadı: %s' % root}, ensure_ascii=False))
+        print(json.dumps({'error': 'folder not found: %s' % root}, ensure_ascii=False))
         return
     store = request.get('store') or None
     action = request.get('action') or 'search'
@@ -274,7 +274,7 @@ def main():
         print(json.dumps(search(root, query, request.get('top') or 6, store),
                          ensure_ascii=False))
         return
-    print(json.dumps({'error': 'bilinmeyen işlem: %s' % action}, ensure_ascii=False))
+    print(json.dumps({'error': 'unknown action: %s' % action}, ensure_ascii=False))
 
 
 if __name__ == '__main__':

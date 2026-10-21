@@ -129,8 +129,8 @@ class MainWindow(QMainWindow):
             self.language_menu.addAction(action)
             self.language_actions[code] = action
 
-        # Profiller menüsü: MAX/FLASH'ta çaba istek başına seçilsin (model
-        # yeniden yüklenmesin). Kapatılırsa sunucunun profil değeri kullanılır.
+        # Profiles menu: on MAX/FLASH the effort is picked per request (the model
+        # is not reloaded). When off, the server's profile value is used.
         self.profiles_menu = menu.addMenu("")
         self.auto_effort_action = QAction(self)
         self.auto_effort_action.setCheckable(True)
@@ -176,8 +176,8 @@ class MainWindow(QMainWindow):
         self.internet_chip = QCheckBox()
         self.agent_chip = QCheckBox()
         self.access_chip = QCheckBox()
-        # Çip durumu ayarlardan gelir. "Tam erişim" varsayılanı KAPALI'dır:
-        # yazma/çalıştırma araçları kullanıcı onayı ister (güvenli varsayılan).
+        # Chip state comes from the settings. "Full access" defaults to OFF:
+        # write/execute tools ask for user approval (safe default).
         prefs = self.settings.get("uiPreferences") or {}
         self.internet_chip.setChecked(bool(prefs.get("internet", True)))
         self.agent_chip.setChecked(bool(prefs.get("agent", True)))

@@ -82,9 +82,9 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     available = available_memory_mib()
     if total:
         shown = available if available is not None else "?"
-        print(f"Birleşik bellek: toplam {total} MiB, kullanılabilir {shown} MiB")
+        print(f"Unified memory: {total} MiB total, {shown} MiB available")
     elif available is not None:
-        print(f"Boş bellek   : {available} MiB")
+        print(f"Free memory   : {available} MiB")
     for env in ("app", "imagegen", "asr", "ocr"):
         python = paths.venv_python(env)
         print(i18n.t("cli.doctor.venv", env=env,
@@ -105,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mamidlabs", description=i18n.t("cli.desc"))
     parser.add_argument("--root", help=i18n.t("cli.help.root"))
     parser.add_argument("--lang", choices=list(i18n.SUPPORTED),
-                        help="arayüz dili (tr|en)")
+                        help="interface language (en|tr)")
     parser.add_argument("--version", action="version", version=f"MamidLabs {__version__}")
     sub = parser.add_subparsers(dest="command")
 
@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help=i18n.t("cli.help.doctor"))
     doctor.set_defaults(func=_cmd_doctor)
 
-    version = sub.add_parser("version", help="sürümü yazdır")
+    version = sub.add_parser("version", help="print the version")
     version.set_defaults(func=_cmd_version)
 
     return parser
@@ -140,7 +140,7 @@ def _resolve_language(args: argparse.Namespace) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Turkish output must survive a redirected (non-UTF-8) console.
+    # Non-ASCII output must survive a redirected (non-UTF-8) console.
     i18n.configure_console()
     parser = build_parser()
     args = parser.parse_args(argv)

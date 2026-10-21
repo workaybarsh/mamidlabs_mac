@@ -1,15 +1,15 @@
 #!/bin/bash
-# MamidLabs (macOS) .dmg paketi — KURULUM SİHİRBAZI ile birlikte.
+# MamidLabs (macOS) .dmg package — together with the SETUP WIZARD.
 #
-# Üretilen DMG'nin içinde "MamidLabs Kurulum.app" vardır. Kullanıcı DMG'yi açar,
-# uygulamayı Applications klasörüne sürükler ve çalıştırır: sihirbaz donanımı
-# ölçüp uygun profili önerir, sonra gerçek kurulumu (llama.cpp, ComfyUI, modeller)
-# `scripts/install-mamidlabs.sh` üzerinden yapar.
+# The generated DMG contains "MamidLabs Setup.app". The user opens the DMG,
+# drags the app into Applications and runs it: the wizard measures the hardware
+# and suggests a suitable profile, then does the real installation (llama.cpp,
+# ComfyUI, models) through `scripts/install-mamidlabs.sh`.
 #
-# Kullanım:
-#   packaging/macos/build-dmg.sh [--output <dizin>] [--no-icon]
+# Usage:
+#   packaging/macos/build-dmg.sh [--output <dir>] [--no-icon]
 #
-# Gereksinim: macOS (hdiutil). İkon için sips/iconutil (yoksa ikonsuz derlenir).
+# Requirement: macOS (hdiutil). For the icon sips/iconutil (built without an icon when missing).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,33 +25,33 @@ while [ $# -gt 0 ]; do
     -h|--help)
       sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0 ;;
-    *) echo "[hata] bilinmeyen seçenek: $1" >&2; exit 1 ;;
+    *) echo "[error] unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
 command -v hdiutil >/dev/null 2>&1 || {
-  echo "[hata] hdiutil bulunamadı; DMG yalnızca macOS'ta derlenir." >&2; exit 1; }
+  echo "[error] hdiutil not found; the DMG can only be built on macOS." >&2; exit 1; }
 
 VERSION="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' "$REPO_DIR/mamidlabs/__init__.py" | head -n1)"
-[ -n "$VERSION" ] || { echo "[hata] sürüm okunamadı: mamidlabs/__init__.py" >&2; exit 1; }
+[ -n "$VERSION" ] || { echo "[error] could not read the version: mamidlabs/__init__.py" >&2; exit 1; }
 
-APP_NAME="MamidLabs Kurulum"
+APP_NAME="MamidLabs Setup"
 STAGE="${SCRIPT_DIR}/build/dmg"
 APP="${STAGE}/${APP_NAME}.app"
-DMG_NAME="MamidLabs-Kurulum-${VERSION}.dmg"
+DMG_NAME="MamidLabs-Setup-${VERSION}.dmg"
 
-echo "[MamidLabs] DMG hazırlanıyor: $DMG_NAME"
+echo "[MamidLabs] Preparing the DMG: $DMG_NAME"
 rm -rf "$STAGE"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 
-# --- Info.plist (sürüm yer tutucusu doldurulur) ------------------------------
+# --- Info.plist (the version placeholder is filled in) -----------------------
 sed "s/@VERSION@/${VERSION}/g" "${SCRIPT_DIR}/Info.plist" > "${APP}/Contents/Info.plist"
 
-# --- iç yürütücü -------------------------------------------------------------
+# --- inner launcher ----------------------------------------------------------
 cp "${SCRIPT_DIR}/MacOS-MamidLabsSetup" "${APP}/Contents/MacOS/MamidLabsSetup"
 chmod 0755 "${APP}/Contents/MacOS/MamidLabsSetup"
 
-# --- gömülü Python kaynakları ------------------------------------------------
+# --- embedded Python sources ------------------------------------------------
 SRC="${APP}/Contents/Resources/mamidlabs-src"
 mkdir -p "$SRC"
 cp -R "$REPO_DIR/mamidlabs" "$SRC/mamidlabs"
@@ -64,7 +64,7 @@ for extra in EULA.txt LICENSE README.md CHANGELOG.md; do
   [ -f "$REPO_DIR/$extra" ] && cp "$REPO_DIR/$extra" "$SRC/"
 done
 
-# --- simge (opsiyonel) -------------------------------------------------------
+# --- icon (optional) ---------------------------------------------------------
 if [ "$WITH_ICON" -eq 1 ] && [ -f "$REPO_DIR/packaging/mamidlabs.png" ] \
    && command -v sips >/dev/null 2>&1 && command -v iconutil >/dev/null 2>&1; then
   ICONSET="${STAGE}/mamidlabs.iconset"
@@ -77,13 +77,13 @@ if [ "$WITH_ICON" -eq 1 ] && [ -f "$REPO_DIR/packaging/mamidlabs.png" ] \
       --out "${ICONSET}/icon_${size}x${size}@2x.png" >/dev/null
   done
   if iconutil -c icns "$ICONSET" -o "${APP}/Contents/Resources/mamidlabs.icns" 2>/dev/null; then
-    echo "[MamidLabs] ikon üretildi (sips/iconutil)"
+    echo "[MamidLabs] icon generated (sips/iconutil)"
   else
-    echo "[uyarı] .icns üretilemedi; ikonsuz devam ediliyor"
+    echo "[warning] .icns could not be generated; continuing without an icon"
   fi
   rm -rf "$ICONSET"
 else
-  echo "[MamidLabs] ikon atlanıyor (--no-icon ya da sips/iconutil yok)"
+  echo "[MamidLabs] skipping the icon (--no-icon or sips/iconutil missing)"
 fi
 
 # --- DMG ---------------------------------------------------------------------
@@ -95,5 +95,5 @@ hdiutil create \
   -ov -format UDZO \
   "${OUTPUT_DIR}/${DMG_NAME}" >/dev/null
 
-echo "[MamidLabs] hazır: ${OUTPUT_DIR}/${DMG_NAME}"
-echo "[MamidLabs] aç: open \"${OUTPUT_DIR}/${DMG_NAME}\"  →  uygulamayı Applications'a sürükle"
+echo "[MamidLabs] ready: ${OUTPUT_DIR}/${DMG_NAME}"
+echo "[MamidLabs] open: open \"${OUTPUT_DIR}/${DMG_NAME}\"  →  drag the app into Applications"

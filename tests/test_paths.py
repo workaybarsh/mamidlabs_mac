@@ -18,7 +18,7 @@ def test_default_root_respects_env(monkeypatch, tmp_path):
     assert paths_mod.default_root() == (tmp_path / "root").resolve()
 
 
-@pytest.mark.skipif(MACOS, reason="macOS'ta XDG yok sayılır; Library kullanılır")
+@pytest.mark.skipif(MACOS, reason="on macOS XDG is ignored; Library is used")
 def test_default_root_respects_xdg(monkeypatch, tmp_path):
     monkeypatch.delenv("MAMIDLABS_ROOT", raising=False)
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))

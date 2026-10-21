@@ -135,19 +135,21 @@ def is_command_intent(text: str) -> bool:
 
 def is_file_intent(text: str) -> bool:
     lowered = (text or "").lower()
-    return any(m in lowered for m in ("dosya", "klasör", "dizin", "belge", "oku", "yaz"))
+    return any(m in lowered for m in ("dosya", "klasör", "dizin", "belge", "oku", "yaz",
+                                      "file", "folder", "directory", "document", "read", "write"))
 
 
 def is_document_intent(text: str) -> bool:
     lowered = (text or "").lower()
     return any(m in lowered for m in ("belge", "pdf", "word", "docx", "rapor", "oluştur",
-                                      "yaz", "hazırla", "excel", "sunum", "pptx"))
+                                      "yaz", "hazırla", "excel", "sunum", "pptx",
+                                      "document", "report", "prepare", "presentation"))
 
 
 def is_image_intent(text: str) -> bool:
     lowered = (text or "").lower()
     return any(m in lowered for m in ("görsel", "resim", "fotoğraf", "çiz", "image",
-                                      "illustrasyon", "logo"))
+                                      "illustrasyon", "logo", "picture", "draw", "photo"))
 
 
 def is_video_intent(text: str) -> bool:
@@ -175,83 +177,83 @@ class ToolRegistry:
     def _build(self) -> dict[str, ToolSpec]:
         return {
             "search_web": ToolSpec(
-                "search_web", "Web'de arama yapar ve sonuç başlıklarını/özetlerini döndürür.",
-                _params({"query": _str("Arama sorgusu."),
-                         "count": {"type": "integer", "description": "Sonuç sayısı (1-8)."}},
+                "search_web", "Searches the web and returns result titles/summaries.",
+                _params({"query": _str("Search query."),
+                         "count": {"type": "integer", "description": "Number of results (1-8)."}},
                         ["query"]), handler=self._search_web),
             "fetch_page": ToolSpec(
-                "fetch_page", "Bir web sayfasının metnini okur.",
-                _params({"url": _str("Sayfa adresi (http/https).")}, ["url"]),
+                "fetch_page", "Reads the text of a web page.",
+                _params({"url": _str("Page address (http/https).")}, ["url"]),
                 handler=self._fetch_page),
             "find_reference_image": ToolSpec(
-                "find_reference_image", "Web'de görsel arar ve yerel bir referans dosyası indirir.",
-                _params({"query": _str("Görsel arama sorgusu.")}, ["query"]),
+                "find_reference_image", "Searches the web for an image and downloads a local reference file.",
+                _params({"query": _str("Image search query.")}, ["query"]),
                 handler=self._find_reference_image),
             "read_document": ToolSpec(
-                "read_document", "PDF/Word/Excel/PowerPoint/ZIP/RAR belgesini okur.",
-                _params({"path": _str("Belge yolu."),
-                         "entry": _str("Arşiv içindeki dosya adı (isteğe bağlı).")}, ["path"]),
+                "read_document", "Reads a PDF/Word/Excel/PowerPoint/ZIP/RAR document.",
+                _params({"path": _str("Document path."),
+                         "entry": _str("File name inside the archive (optional).")}, ["path"]),
                 handler=self._read_document),
             "read_images_ocr": ToolSpec(
-                "read_images_ocr", "Görselleri OCR ile okur (yazı çıkarır).",
+                "read_images_ocr", "Reads images with OCR (extracts text).",
                 _params({"paths": {"type": "array", "items": {"type": "string"},
-                                   "description": "Görsel yolları."}}, ["paths"]),
+                                   "description": "Image paths."}}, ["paths"]),
                 handler=self._read_images_ocr),
             "create_document": ToolSpec(
-                "create_document", "PDF/DOCX/PPTX/XLSX belge üretir.",
+                "create_document", "Produces a PDF/DOCX/PPTX/XLSX document.",
                 _params({"format": _str("pdf|docx|pptx|xlsx"),
-                         "title": _str("Belge başlığı."),
-                         "content": _str("Belge içeriği (markdown benzeri).")},
+                         "title": _str("Document title."),
+                         "content": _str("Document content (markdown-like).")},
                         ["format", "content"]), kind="write", handler=self._create_document),
             "generate_chart": ToolSpec(
-                "generate_chart", "Grafik üretir (bar/line/pie/scatter/function).",
+                "generate_chart", "Produces a chart (bar/line/pie/scatter/function).",
                 _params({"type": _str("bar|line|pie|scatter|function"),
-                         "title": _str("Grafik başlığı."),
+                         "title": _str("Chart title."),
                          "labels": {"type": "array", "items": {"type": "string"}},
                          "values": {"type": "array", "items": {"type": "number"}},
-                         "expression": _str("function türü için ifade (x değişkeni).")},
+                         "expression": _str("Expression for the function type (variable x).")},
                         ["type"]), kind="write", handler=self._generate_chart),
             "generate_image": ToolSpec(
-                "generate_image", "Yerel ComfyUI ile görsel üretir/düzenler.",
-                _params({"prompt": _str("İngilizce görsel istemi."),
+                "generate_image", "Generates/edits an image with the local ComfyUI.",
+                _params({"prompt": _str("English image prompt."),
                          "mode": _str("yeni|yeniden_uret|stil_referansi|kimlik_duzenle"),
-                         "reference": _str("Referans görsel yolu (isteğe bağlı).")},
+                         "reference": _str("Reference image path (optional).")},
                         ["prompt"]), kind="write", handler=self._generate_image),
             "generate_video": ToolSpec(
-                "generate_video", "Yerel ComfyUI ile video üretir (Wan 2.2).",
-                _params({"prompt": _str("İngilizce video istemi."),
+                "generate_video", "Generates a video with the local ComfyUI (Wan 2.2).",
+                _params({"prompt": _str("English video prompt."),
                          "mode": _str("metin|gorsel|video"),
-                         "reference": _str("Kaynak görsel/video yolu (isteğe bağlı).")},
+                         "reference": _str("Source image/video path (optional).")},
                         ["prompt"]), kind="write", handler=self._generate_video),
             "ask_model": ToolSpec(
-                "ask_model", "Başka bir API sağlayıcısına soru sorar.",
+                "ask_model", "Asks another API provider a question.",
                 _params({"provider": _str("openai|claude|gemini|deepseek|custom"),
-                         "prompt": _str("Sorulacak metin."),
-                         "model": _str("Model kimliği (isteğe bağlı).")}, ["provider", "prompt"]),
+                         "prompt": _str("Text to ask."),
+                         "model": _str("Model id (optional).")}, ["provider", "prompt"]),
                 handler=self._ask_model),
             "list_bound_files": ToolSpec(
-                "list_bound_files", "Bağlı klasördeki dosyaları listeler.",
-                _params({"relative_path": _str("Alt klasör (isteğe bağlı).")}),
+                "list_bound_files", "Lists the files in the bound folder.",
+                _params({"relative_path": _str("Subfolder (optional).")}),
                 handler=self._list_bound_files),
             "read_bound_file": ToolSpec(
-                "read_bound_file", "Bağlı klasördeki bir dosyayı okur.",
-                _params({"relative_path": _str("Dosya yolu.")}, ["relative_path"]),
+                "read_bound_file", "Reads a file in the bound folder.",
+                _params({"relative_path": _str("File path.")}, ["relative_path"]),
                 handler=self._read_bound_file),
             "search_folder": ToolSpec(
-                "search_folder", "Bağlı klasörde anahtar sözcüklerle yerel (çevrimdışı) arama "
-                "yapar ve en ilgili metin parçalarını dosya yolu + satır numarasıyla döndürür. "
-                "Büyük klasörlerde tek tek dosya okumadan önce nerede arayacağını bulmak için kullan.",
-                _params({"query": _str("Arama sorgusu."),
-                         "top_k": {"type": "integer", "description": "Sonuç sayısı (1-12)."}},
+                "search_folder", "Searches the bound folder locally (offline) by keyword and returns "
+                "the most relevant text chunks with their file path and line number. Use it on large "
+                "folders to find where to look before reading file after file.",
+                _params({"query": _str("Search query."),
+                         "top_k": {"type": "integer", "description": "Number of results (1-12)."}},
                         ["query"]), handler=self._search_folder),
             "write_bound_file": ToolSpec(
-                "write_bound_file", "Bağlı klasöre dosya yazar.",
-                _params({"relative_path": _str("Dosya yolu."),
-                         "content": _str("Yazılacak içerik.")}, ["relative_path", "content"]),
+                "write_bound_file", "Writes a file into the bound folder.",
+                _params({"relative_path": _str("File path."),
+                         "content": _str("Content to write.")}, ["relative_path", "content"]),
                 kind="write", handler=self._write_bound_file),
             "run_command": ToolSpec(
-                "run_command", "Kabuk komutu çalıştırır (kullanıcı onayı gerekir).",
-                _params({"command": _str("Çalıştırılacak komut.")}, ["command"]),
+                "run_command", "Runs a shell command (user approval required).",
+                _params({"command": _str("Command to run.")}, ["command"]),
                 kind="exec", handler=self._run_command),
         }
 
@@ -289,10 +291,11 @@ class ToolRegistry:
             names.append("create_document")
         if agent:
             names.append("ask_model")
-            # Ses eki olan turda bağlı-klasör DOSYA araçları sunulmaz: ses zaten
-            # döküm olarak son kullanıcı mesajına eklenir; aksi halde küçük model
-            # ses DOSYASINI aramaya/okumaya/yazmaya kalkıp turları boşa harcar.
-            # Kullanıcı açıkça dosya isterse (is_file_intent) araçlar sunulur.
+            # Bound-folder FILE tools are not offered on a turn with an audio
+            # attachment: the audio is already appended to the last user message
+            # as a transcript; otherwise the small model tries to search/read/write
+            # the AUDIO FILE and wastes turns. If the user explicitly asks for a
+            # file (is_file_intent) the tools are offered anyway.
             if not has_audio or is_file_intent(message):
                 names += ["list_bound_files", "read_bound_file", "search_folder",
                           "write_bound_file"]
@@ -304,7 +307,7 @@ class ToolRegistry:
     def call(self, name: str, arguments: dict) -> str:
         spec = self._specs.get(name)
         if not spec or not spec.handler:
-            return json.dumps({"error": f"bilinmeyen araç: {name}"}, ensure_ascii=False)
+            return json.dumps({"error": f"unknown tool: {name}"}, ensure_ascii=False)
         try:
             return spec.handler(arguments or {})
         except Exception as exc:  # noqa: BLE001 - surfaced to the model as an error
@@ -353,13 +356,13 @@ class ToolRegistry:
     # --- media ---------------------------------------------------------------
     def _generate_image(self, args: dict) -> str:
         if not self.media:
-            return json.dumps({"error": "görsel üretimi bu kurulumda yapılandırılmamış."},
+            return json.dumps({"error": "image generation is not configured in this install."},
                               ensure_ascii=False)
         return json.dumps(self.media.generate_image(args), ensure_ascii=False)
 
     def _generate_video(self, args: dict) -> str:
         if not self.media:
-            return json.dumps({"error": "video üretimi bu kurulumda yapılandırılmamış."},
+            return json.dumps({"error": "video generation is not configured in this install."},
                               ensure_ascii=False)
         return json.dumps(self.media.generate_video(args), ensure_ascii=False)
 
@@ -367,12 +370,12 @@ class ToolRegistry:
     def _ask_model(self, args: dict) -> str:
         provider_id = str(args.get("provider", ""))
         if provider_id in ("", "local"):
-            return json.dumps({"error": "ask_model yerel sağlayıcı için kullanılmaz."},
+            return json.dumps({"error": "ask_model is not used for the local provider."},
                               ensure_ascii=False)
         key = self.settings.provider_key(provider_id)
         model = str(args.get("model") or self.settings.provider(provider_id).get("model") or "")
         if not model:
-            return json.dumps({"error": "model kimliği gerekli."}, ensure_ascii=False)
+            return json.dumps({"error": "a model id is required."}, ensure_ascii=False)
         body = {"model": model, "messages": [{"role": "user", "content": str(args.get("prompt", ""))}],
                 "max_tokens": 4096}
         try:
@@ -405,10 +408,10 @@ class ToolRegistry:
     def _list_bound_files(self, args: dict) -> str:
         root = self._bound_root()
         if not root:
-            return json.dumps({"error": "bağlı klasör ayarlı değil."}, ensure_ascii=False)
+            return json.dumps({"error": "no bound folder is configured."}, ensure_ascii=False)
         base = self._resolve_bound(str(args.get("relative_path") or ""))
         if base is None or not base.exists():
-            return json.dumps({"error": "yol bağlı klasör dışında."}, ensure_ascii=False)
+            return json.dumps({"error": "the path is outside the bound folder."}, ensure_ascii=False)
         entries = []
         for item in sorted(base.iterdir())[:500]:
             entries.append({"name": item.name, "dir": item.is_dir(),
@@ -418,10 +421,10 @@ class ToolRegistry:
     def _read_bound_file(self, args: dict) -> str:
         target = self._resolve_bound(str(args.get("relative_path", "")))
         if target is None or not target.is_file():
-            return json.dumps({"error": "dosya bulunamadı ya da bağlı klasör dışında."},
+            return json.dumps({"error": "file not found or outside the bound folder."},
                               ensure_ascii=False)
         if target.stat().st_size > 2 * 1024 * 1024:
-            return json.dumps({"error": "dosya çok büyük (2 MB sınırı)."}, ensure_ascii=False)
+            return json.dumps({"error": "the file is too large (2 MB limit)."}, ensure_ascii=False)
         try:
             text = target.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -431,10 +434,10 @@ class ToolRegistry:
     def _search_folder(self, args: dict) -> str:
         root = self._bound_root()
         if not root or not root.is_dir():
-            return json.dumps({"error": "bağlı klasör ayarlı değil."}, ensure_ascii=False)
+            return json.dumps({"error": "no bound folder is configured."}, ensure_ascii=False)
         query = str(args.get("query", "")).strip()
         if not query:
-            return json.dumps({"error": "query gerekli."}, ensure_ascii=False)
+            return json.dumps({"error": "query is required."}, ensure_ascii=False)
         try:
             top = int(args.get("top_k", 6) or 6)
         except (TypeError, ValueError):
@@ -445,17 +448,17 @@ class ToolRegistry:
         result = self.runner.run("rag-tools.py", payload, timeout=180)
         if not isinstance(result, dict) or result.get("error"):
             message = result.get("error") if isinstance(result, dict) else str(result)
-            return f"Arama hatası: {message}"
+            return f"Search error: {message}"
         hits = result.get("hits") or []
         files = result.get("files", 0)
         chunks = result.get("chunks", 0)
         if not hits:
-            note = result.get("message") or "Eşleşme yok."
-            return f"{note} ({files} dosya, {chunks} parça tarandı)"
+            note = result.get("message") or "No matches."
+            return f"{note} ({files} files, {chunks} chunks scanned)"
         blocks = [f"[{hit.get('path')}:{hit.get('line')}]\n{hit.get('text')}"
                   for hit in hits]
-        return (f"Bağlı klasörde '{query}' için en ilgili parçalar "
-                f"({files} dosya, {chunks} parça tarandı):\n\n" + "\n\n".join(blocks))
+        return (f"Most relevant chunks for '{query}' in the bound folder "
+                f"({files} files, {chunks} chunks scanned):\n\n" + "\n\n".join(blocks))
 
     def _rag_store(self, root: Path) -> Path:
         """RAG index path under ``tools/rag`` (bound-<hash8>.json).
@@ -470,7 +473,7 @@ class ToolRegistry:
     def _write_bound_file(self, args: dict) -> str:
         target = self._resolve_bound(str(args.get("relative_path", "")))
         if target is None:
-            return json.dumps({"error": "yol bağlı klasör dışında."}, ensure_ascii=False)
+            return json.dumps({"error": "the path is outside the bound folder."}, ensure_ascii=False)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(str(args.get("content", "")), encoding="utf-8")
         return json.dumps({"path": str(target), "bytes": target.stat().st_size},
@@ -480,7 +483,7 @@ class ToolRegistry:
     def _run_command(self, args: dict) -> str:
         command = str(args.get("command", "")).strip()
         if not command:
-            return json.dumps({"error": "komut boş."}, ensure_ascii=False)
+            return json.dumps({"error": "the command is empty."}, ensure_ascii=False)
         workdir = self._bound_root() or self.paths.root
         shell = "/bin/zsh" if sys.platform == "darwin" else "/bin/bash"
         try:
@@ -489,7 +492,7 @@ class ToolRegistry:
                 timeout=120, cwd=str(workdir),
             )
         except subprocess.TimeoutExpired:
-            return json.dumps({"error": "komut zaman aşımına uğradı (120 sn)."}, ensure_ascii=False)
+            return json.dumps({"error": "the command timed out (120 s)."}, ensure_ascii=False)
         except OSError as exc:
             return json.dumps({"error": str(exc)}, ensure_ascii=False)
         return json.dumps({"exit_code": completed.returncode,
@@ -501,8 +504,8 @@ class ToolRegistry:
 class MediaBridge:
     """Adapter the UI supplies so media tools can drive ComfyUI/API generation."""
 
-    generate_image: Callable[[dict], dict] = field(default=lambda a: {"error": "yok"})
-    generate_video: Callable[[dict], dict] = field(default=lambda a: {"error": "yok"})
+    generate_image: Callable[[dict], dict] = field(default=lambda a: {"error": "none"})
+    generate_video: Callable[[dict], dict] = field(default=lambda a: {"error": "none"})
 
 
 def parse_command(command: str) -> list[str]:
@@ -513,7 +516,7 @@ def parse_command(command: str) -> list[str]:
         return [command]
 
 
-def sanitize_name(value: str, fallback: str = "dosya") -> str:
+def sanitize_name(value: str, fallback: str = "file") -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "-", value).strip("-")
     return cleaned or fallback
 

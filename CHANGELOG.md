@@ -1,128 +1,125 @@
-# Değişiklik Günlüğü
+# Changelog
 
-Bu dosya kullanıcıya görünen değişiklikleri listeler. Biçim
-[Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) temellidir ve sürümler
-[Anlamsal Sürümleme](https://semver.org/lang/tr/) izler.
+This file lists user-visible changes. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
+[Semantic Versioning](https://semver.org/).
 
-Sürümün tek kaynağı `mamidlabs/__init__.py` içindeki `__version__` ve
-`pyproject.toml` içindeki `version` alanıdır (ikisi eşit olmalıdır).
+The single source of the version is `__version__` in `mamidlabs/__init__.py` and the
+`version` field in `pyproject.toml` (the two must be equal).
 
 ## [1.0.0] — 2026-10-16
 
-### Eklendi
-- **Profil indirmelerinde SHA256 doğrulaması ve yarım indirmeyi sürdürme.** `mamidlabs/workers/
-  hf-hub.py` indirilen dosyanın SHA256 özetini Hugging Face'in LFS özetiyle karşılaştırır
-  (katalogda isteğe bağlı `sha256` alanı varsa çevrimdışı da); özet uyuşmazsa dosya **silinir** ve
-  net hata verilir, sessizce bozuk model kalmaz. Doğrulama MTP enjeksiyonundan **önce** yapılır
-  (enjeksiyon dosyayı değiştirir). Yarım kalan indirme `hf_hub_download` tarafından kaldığı
-  yerden sürdürülür ve işçi bunu durum satırında bildirir. Testler:
-  `tests/test_model_download_integrity.py`.
-- **Otomatik çaba: sorunun zorluğuna göre MAX/FLASH davranışı (model yeniden yüklenmeden).**
-  MAX ve FLASH aynı model olduğundan, profil değiştirmek yerine o tur için `reasoning_effort`
-  istek başına verilir: kısa soru/selamlama `low`, orta `medium`, çok adımlı matematik/kod/analiz
-  `xhigh`. Seçim tur başında bir kez yapılır ve tur boyunca sabit kalır (KV öneki bozulmaz).
-  Profiller menüsündeki **"Otomatik çaba (soruya göre)"** ile kapatılabilir
-  (`settings/api.json → autoEffort`). LITE'ta ve API sağlayıcılarında uygulanmaz.
-  Testler: `tests/test_auto_effort.py`.
-- **Prompt injection sertleştirmesi.** Web sayfası, belge, OCR ve bağlı dosya içeriği modele
-  `[GÜVENİLMEYEN İÇERİK …]` etiketiyle **veri** olarak verilir; sabit sistem istemi içerikteki
-  talimatların uygulanmamasını söyler. O turda güvenilmeyen içerik okunduysa **"Tam erişim"
-  çipinde bile** `run_command` ve `write_bound_file` için onay istenir (`approval_required`),
-  böylece içeriğe gizlenmiş bir talimat kullanıcı adına işlem yaptıramaz. Testler:
-  `tests/test_prompt_injection.py`.
-- **Yerel RAG: bağlı klasörde çevrimdışı (BM25) arama.** Yeni `search_folder` aracı, bağlı
-  klasörde tek tek dosya okumadan önce ilgili metin parçalarını bulur:
-  `mamidlabs/workers/rag-tools.py` düz metin dosyalarını tarar (`node_modules`/`venv`/`.git`
-  atlanır), satır sınırlarını koruyan ~900 karakterlik parçalar üretir ve BM25 + tam öbek
-  bonusuyla sıralar; sonuç `yol:satır` biçiminde döner. İndeks `tools/rag/` altında tutulur ve
-  kaynak dosyalar değişmedikçe yeniden kurulmaz; ek Python paketi gerekmez. Sonuç, diğer dış
-  kaynaklar gibi **güvenilmeyen veri** olarak etiketlenir. Testler: `tests/test_rag_tools.py`.
-- **GitHub Actions yayın iş akışı (`.dmg`).** `v*` etiketi itildiğinde `.dmg`
-  paketi derlenir ve **sabit adla** (`MamidLabs.dmg`) GitHub Release'e yüklenir;
-  böylece `releases/latest/download/MamidLabs.dmg` her zaman en son sürümü
-  doğrudan indirir. Sürümün tek kaynağı `__version__` (etiketle eşleşmesi
-  doğrulanır) ve sürüm notu `CHANGELOG.md`'den okunur. Dal/PR koşuları yalnızca
-  artifact üretir.
-- **Kurulum sihirbazı (Qt6).** **MamidLabs Kurulum.app** (ya da
-  `scripts/mamidlabs-setup.sh`) donanımı ölçüp uygun profili öneren bir sihirbaz
-  açar: dil (Türkçe/English) → karşılama → lisans → klasör → donanım raporu →
-  profil (LITE/PRO/indirme yok/kendi modelin–API) → (kendi modellerin) → (API) →
-  (bileşenler) → hazır → kurulum → özet → bitiş. 13 sayfa; `mamidlabs/wizard/`.
-  Sihirbaz `settings/api.json`'a dili ve seçimleri yazar, kurulumu
-  `install-mamidlabs.sh` üzerinden yürütür ve ilerlemeyi
-  `logs/kurulum-adim.txt`'ten okur.
-- **Donanım ölçümü** (`mamidlabs/core/hwinfo.py`): **birleşik bellek** ve CPU
-  ailesi temelli öneri (Apple Silicon ≥ 32 GB → PRO, ≥ 16 GB → LITE; Intel Mac ya
-  da az bellek → API sağlayıcıları), macOS sürümü, çekirdek sayısı ve boş disk.
-- **`.dmg` paketi** (`packaging/macos/build-dmg.sh`): içinde **MamidLabs
-  Kurulum.app** bulunan bir disk görüntüsü üretir; `.app` gömülü Python
-  kaynaklarıyla `python3 -m mamidlabs.wizard` çalıştırır.
-- **Çalışma anı TR/ENG yerelleştirme**: tüm arayüz, çekirdek, CLI ve sihirbaz
-  metinleri `mamidlabs/locales/{tr,en}.json` kataloglarından gelir; arayüz dili
-  menüden ve sihirbazın ilk adımından anında değişir. `--lang`, `--language`.
-- `install-mamidlabs.sh --language tr|en` (ayar dosyasına yazar), sihirbaz için
-  ilerleme (`logs/kurulum-adim.txt`) ve özet (`logs/kurulum-ozeti.txt`) dosyaları.
-- Yeni testler: `test_hwinfo.py`, `test_wizard.py` (saf), `test_wizard_gui.py`
-  (başsız Qt), `test_i18n.py`, `test_packaging_contract.py`,
-  `test_model_download_integrity.py`, `test_auto_effort.py`,
-  `test_prompt_injection.py`, `test_rag_tools.py` (toplam 207 test).
-- **MamidLabs macOS sürümü.** Windows sürümünün (`MamidLabsTR` / `MamidLabsENG`)
-  tam macOS portu: WinForms/PowerShell yerine tek dilde **Python 3.12 + PySide6
-  (Qt6)** masaüstü uygulaması.
-- Qt6 ana pencere: akışlı sohbet, profil/sağlayıcı/model seçicileri, İnternet /
-  Ajan / Tam erişim çipleri, model başlat-durdur, araç onay penceresi.
-- API bağlantıları penceresi; anahtarlar tercihen **macOS Keychain (keyring)**
-  üzerinden, yoksa `0600` izinli ayar dosyasında saklanır.
-- Komut satırı arayüzü: `python -m mamidlabs {doctor,profiles,manage}`.
-- Bash kurulum/yönetim betikleri: `install-mamidlabs.sh` (aşamalı),
-  `manage-mamidlabs.sh`, `uninstall-mamidlabs.sh`, `smoke-test.sh`
-  (hepsi macOS bash 3.2 ile uyumlu).
-- **`MamidLabs.app`** uygulama paketi (`Info.plist` + yürütücü) ve PNG'den üretilen
-  `.icns` simge; Launchpad/Finder/Dock'dan çalıştırılabilir.
-- Çekirdek modüller: `paths` (macOS kurulum kökü), `settings`, `profiles`,
-  `providers` (OpenAI ↔ Claude dönüştürücüleri + akış), `manage`
-  (`ModelManager`, birleşik bellek kapısı, ComfyUI/orphan temizliği), `inference`
-  (sohbet döngüsü, araç döngüsü, onay, bağlam sıkıştırma), `tools`
-  (araç kaydı + kapılar + web başarısızlık dürüstlüğü), `chart`, `runner`.
-- Python işçileri macOS'a taşındı (web, belge, OCR, medya, whisper/transcriber,
-  `mtp_inject`, `hf-hub`, `api-media`); kurulum kökü artık `MAMIDLABS_ROOT`'tan
-  okunur (`__file__`'dan türetilmez).
-- Birim testleri (`pytest`); bellek kapısı ve platforma duyarlı yol testleri dahil.
+### Added
+- **SHA256 verification and resumable downloads for profile downloads.** `mamidlabs/workers/
+  hf-hub.py` compares the SHA256 digest of the downloaded file with Hugging Face's LFS digest
+  (also offline when the catalog has the optional `sha256` field); if the digest does not
+  match the file is **deleted** and a clear error is raised, so no silently corrupt model is
+  left behind. Verification runs **before** MTP injection (the injection changes the file). An
+  interrupted download is resumed by `hf_hub_download` and the worker reports this in the
+  status line. Tests: `tests/test_model_download_integrity.py`.
+- **Auto effort: MAX/FLASH behaviour based on question difficulty (without reloading the
+  model).** Since MAX and FLASH are the same model, instead of switching profile the
+  `reasoning_effort` is given per request for that turn: a short question/greeting `low`,
+  medium `medium`, multi-step maths/code/analysis `xhigh`. The choice is made once at the
+  start of the turn and stays fixed for the whole turn (the KV prefix is not broken). It can
+  be turned off with **"Auto effort (by question)"** in the Profiles menu
+  (`settings/api.json → autoEffort`). It does not apply to LITE or to API providers.
+  Tests: `tests/test_auto_effort.py`.
+- **Prompt injection hardening.** Web page, document, OCR and bound-file content is given to
+  the model as **data** with the `[UNTRUSTED CONTENT …]` label; the fixed system prompt says
+  the instructions in the content must not be applied. If untrusted content was read in that
+  turn, approval is asked for `run_command` and `write_bound_file` **even with the "Full
+  access" chip on** (`approval_required`), so an instruction hidden in the content cannot make
+  the app act on the user's behalf. Tests: `tests/test_prompt_injection.py`.
+- **Local RAG: offline (BM25) search in the bound folder.** The new `search_folder` tool finds
+  the relevant text chunks in the bound folder before reading files one by one:
+  `mamidlabs/workers/rag-tools.py` scans plain-text files (`node_modules`/`venv`/`.git` are
+  skipped), produces ~900-character chunks that preserve line boundaries, and ranks them with
+  BM25 + an exact-phrase bonus; the result is returned as `path:line`. The index is kept under
+  `tools/rag/` and is not rebuilt while the source files are unchanged; no extra Python
+  package is needed. The result is labelled as **untrusted data**, like other external
+  sources. Tests: `tests/test_rag_tools.py`.
+- **GitHub Actions release workflow (`.dmg`).** When a `v*` tag is pushed, the `.dmg` package
+  is built and uploaded to the GitHub Release under a **fixed name** (`MamidLabs.dmg`), so
+  `releases/latest/download/MamidLabs.dmg` always downloads the latest version directly. The
+  single source of the version is `__version__` (its match with the tag is verified) and the
+  release notes are read from `CHANGELOG.md`. Branch/PR runs only produce an artifact.
+- **Setup wizard (Qt6).** **MamidLabs Setup.app** (or `scripts/mamidlabs-setup.sh`) opens a
+  wizard that measures the hardware and suggests a suitable profile: language (English/TR) →
+  welcome → licence → folder → hardware report → profile (LITE/PRO/no download/own model–API)
+  → (your own models) → (API) → (components) → ready → install → summary → finish. 13 pages;
+  `mamidlabs/wizard/`. The wizard writes the language and choices into `settings/api.json`,
+  runs the installation through `install-mamidlabs.sh`, and reads progress from
+  `logs/kurulum-adim.txt`.
+- **Hardware measurement** (`mamidlabs/core/hwinfo.py`): recommendation based on **unified
+  memory** and CPU family (Apple Silicon ≥ 32 GB → PRO, ≥ 16 GB → LITE; Intel Mac or little
+  memory → API providers), the macOS version, the core count and the free disk.
+- **`.dmg` package** (`packaging/macos/build-dmg.sh`): produces a disk image containing
+  **MamidLabs Setup.app**; the `.app` runs `python3 -m mamidlabs.wizard` with embedded Python
+  sources.
+- **Runtime EN/TR localisation**: every interface, core, CLI and wizard string comes from the
+  `mamidlabs/locales/{en,tr}.json` catalogs; the interface language changes instantly from the
+  menu and from the wizard's first page. `--lang`, `--language`.
+- `install-mamidlabs.sh --language en|tr` (writes to the settings file), plus progress
+  (`logs/kurulum-adim.txt`) and summary (`logs/kurulum-ozeti.txt`) files for the wizard.
+- New tests: `test_hwinfo.py`, `test_wizard.py` (pure), `test_wizard_gui.py` (headless Qt),
+  `test_i18n.py`, `test_packaging_contract.py`, `test_model_download_integrity.py`,
+  `test_auto_effort.py`, `test_prompt_injection.py`, `test_rag_tools.py` (203 tests in total).
+- **MamidLabs macOS edition.** A complete macOS port of the Windows edition (`MamidLabsTR` /
+  `MamidLabsENG`): a single-language **Python 3.12 + PySide6 (Qt6)** desktop application
+  instead of WinForms/PowerShell.
+- Qt6 main window: streaming chat, profile/provider/model selectors, Internet / Agent / Full
+  access chips, model start-stop, tool approval dialog.
+- API connections window; keys are stored preferably in the **macOS Keychain (keyring)**,
+  otherwise in the `0600` settings file.
+- Command-line interface: `python -m mamidlabs {doctor,profiles,manage}`.
+- Bash install/management scripts: `install-mamidlabs.sh` (staged), `manage-mamidlabs.sh`,
+  `uninstall-mamidlabs.sh`, `smoke-test.sh` (all compatible with macOS bash 3.2).
+- **`MamidLabs.app`** application bundle (`Info.plist` + launcher) and a `.icns` icon
+  generated from PNG; starts from Launchpad/Finder/Dock.
+- Core modules: `paths` (macOS install root), `settings`, `profiles`, `providers` (OpenAI ↔
+  Claude converters + streaming), `manage` (`ModelManager`, unified-memory gate,
+  ComfyUI/orphan cleanup), `inference` (chat loop, tool loop, approval, context compaction),
+  `tools` (tool registry + gates + web failure honesty), `chart`, `runner`.
+- Python workers ported to macOS (web, document, OCR, media, whisper/transcriber,
+  `mtp_inject`, `hf-hub`, `api-media`); the install root is now read from `MAMIDLABS_ROOT`
+  (not derived from `__file__`).
+- Unit tests (`pytest`); including memory-gate and platform-sensitive path tests.
 
-### Düzeltildi
-- **Uzun sohbette bağlam taşması artık zarifçe karşılanır (Windows paritesi).** Sıkıştırma iki
-  geçişli oldu: önce en eski araç çıktılarının yalnızca başı korunur, yetmezse en eski araç
-  çıktıları ve eski asistan metni kısa bir işaretle değiştirilir (mesaj silinmez,
-  `tool_calls`/`tool` eşleşmesi bozulmaz). İstem hâlâ sığmıyorsa araçlar hiç sunulmaz ve
-  modelden **eldeki bulgularla görünür yanıt** istenir (`llama-server --no-context-shift`
-  kullanıldığından taşan istem sert hata verirdi). Çıktı bütçesi (`max_tokens`) kalan odaya
-  göre kısılır ve yalnızca gerçekten bir şey kısaldıysa "Bağlam sınırına yaklaşıldı" notu
-  gösterilir (boşuna yanıltıcı not verilmez). Testler: `tests/test_inference.py`.
+### Fixed
+- **Context overflow in long chats is now handled gracefully (Windows parity).** Compaction
+  has two passes: first only the head of the oldest tool outputs is kept, and if that is not
+  enough the oldest tool outputs and old assistant text are replaced with a short marker
+  (messages are not deleted, the `tool_calls`/`tool` pairing is not broken). If the prompt
+  still does not fit, tools are not offered at all and the model is asked for a **visible
+  answer from the findings present** (`llama-server --no-context-shift` is used, so an
+  overflowing prompt was a hard error). The output budget (`max_tokens`) is reduced to the
+  remaining room and the "Approaching the context limit" note is only shown when something
+  was actually shortened (no misleading note for nothing). Tests: `tests/test_inference.py`.
 
-### Değişti
-- **Lisans PolyForm Strict 1.0.0 oldu (kaynak-açık; yalnızca ticari olmayan kullanım).**
-  `LICENSE` ve `EULA.txt` resmî PolyForm Strict 1.0.0 metnini taşır: yazılımı dağıtma ve
-  değiştirme/türev eser üretme hakkı verilmez; ticari kullanım için önceden yazılı izin gerekir.
-  README lisans bölümü ve lisans testi buna göre güncellendi; `.dmg` derleme betiği zaten
-  `EULA.txt`/`LICENSE` dosyalarını pakete gömer. Sürüm numarası değişmedi (1.0.0).
+### Changed
+- **The licence is now PolyForm Strict 1.0.0 (source-available; noncommercial use only).**
+  `LICENSE` and `EULA.txt` carry the official PolyForm Strict 1.0.0 text: no right to
+  distribute or modify/make new works based on the software; commercial use requires prior
+  written permission. The README licence section and the licence test were updated
+  accordingly; the `.dmg` build script already embeds `EULA.txt`/`LICENSE`. The version number
+  did not change (1.0.0).
 
-### Değişti (Windows sürümüne göre)
-- Windows **DPAPI** yerine macOS **Keychain** / `0600` dosya.
-- Windows **PowerShell 7 gömülü çalışma zamanı** yerine sistem Python'u
-  (kurulum kökünde `runtime/` yok).
-- Windows **WinForms** yerine **Qt6**; `System.Drawing` grafikleri yerine
-  **matplotlib**.
-- **NVIDIA/CUDA yerine Metal:** llama.cpp `macos-arm64`/`macos-x64` yapısı,
-  torch/ComfyUI **MPS** (torch PyPI'dan; CUDA index'i ve `nvidia-*` paketleri yok).
-- **VRAM kapısı → birleşik bellek kapısı:** `nvidia-smi` yerine `vm_stat`
-  (geri kazanılabilir sayfalar) + `hw.pagesize`; `MAMIDLABS_FREE_MEM_MIB` ile
-  geçersiz kılınabilir.
-- Ses dökümü macOS'ta **CPU'da** (CTranslate2'nin Metal arka ucu yok).
-- 7-Zip yolu Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`) + PATH; PDF yazı
-  tipleri macOS sistem fontları + matplotlib DejaVu; HTTP User-Agent `Macintosh`.
-- `.desktop` yerine **`.app` paketi**; `run_command` `/bin/zsh -lc` ile çalışır.
+### Changed (compared with the Windows edition)
+- macOS **Keychain** / `0600` file instead of Windows **DPAPI**.
+- The system Python instead of the Windows **PowerShell 7 embedded runtime** (no `runtime/`
+  in the install root).
+- **Qt6** instead of Windows **WinForms**; **matplotlib** instead of `System.Drawing` graphics.
+- **Metal instead of NVIDIA/CUDA:** llama.cpp `macos-arm64`/`macos-x64` build, torch/ComfyUI
+  **MPS** (torch from PyPI; no CUDA index and no `nvidia-*` packages).
+- **VRAM gate → unified-memory gate:** `vm_stat` (reclaimable pages) + `hw.pagesize` instead
+  of `nvidia-smi`; overridable with `MAMIDLABS_FREE_MEM_MIB`.
+- Audio transcription **on the CPU** on macOS (CTranslate2 has no Metal backend).
+- 7-Zip path from Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`) + PATH; PDF fonts from
+  macOS system fonts + matplotlib DejaVu; HTTP User-Agent `Macintosh`.
+- An **`.app` bundle** instead of `.desktop`; `run_command` runs with `/bin/zsh -lc`.
 
-### Korundu
-- Profil takma adları (`qwen3.8-27b-max` / `-flash`, `qwen3.5-9b-lite`), model
-  kimlikleri, araç adları, sunucu argüman demetleri, MTP, bellek kapısı payları ve
-  ComfyUI yaşam döngüsü — Windows sürümüyle birebir.
+### Preserved
+- Profile aliases (`qwen3.8-27b-max` / `-flash`, `qwen3.5-9b-lite`), model ids, tool names,
+  server argument bundles, MTP, memory-gate headroom and the ComfyUI lifecycle — exactly the
+  same as the Windows edition.

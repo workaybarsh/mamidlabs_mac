@@ -49,7 +49,7 @@ def test_to_text_only_flattens_images():
     out = providers.to_text_only(messages)
     assert isinstance(out[0]["content"], str)
     assert "bak" in out[0]["content"]
-    assert "görsel" in out[0]["content"]
+    assert "image" in out[0]["content"]
 
 
 def test_convert_request_openai(tmp_path):

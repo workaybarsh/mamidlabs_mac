@@ -11,8 +11,8 @@ from urllib.parse import urlparse, quote
 import requests
 from PIL import Image, ImageOps
 
-# Kurulum kokunu ortam degiskeninden oku (bkz. _root.py); paket site-packages'te
-# olabilecegi icin kendi konumundan turetmek yanlis olur.
+# Read the install root from the environment (see _root.py); the package may
+# live in site-packages, so deriving it from the file location would be wrong.
 from _root import install_root
 
 ROOT = install_root()
@@ -46,20 +46,20 @@ def normalized_image(path, size=None):
 
 def decode_image_payload(value):
     if not value or len(value) > (MAX_IMAGE_BYTES * 4 // 3 + 16):
-        raise ValueError('API gorsel yaniti boyut sinirini asti.')
+        raise ValueError('The API image response exceeded the size limit.')
     try:
         pixels = base64.b64decode(value, validate=True)
     except (ValueError, TypeError):
-        raise ValueError('API gecersiz gorsel yaniti dondurdu.')
+        raise ValueError('The API returned an invalid image response.')
     if len(pixels) > MAX_IMAGE_BYTES:
-        raise ValueError('API gorsel yaniti boyut sinirini asti.')
+        raise ValueError('The API image response exceeded the size limit.')
     return pixels
 
 def image_generation(job):
     provider, key, model = job['provider'], job['apiKey'], job['model']
     source = job.get('sourceImage')
     aspect = job.get('aspect', '1:1')
-    emit('status', f'{provider} API ile görsel üretiliyor…')
+    emit('status', f'Generating an image with the {provider} API…')
     if provider == 'openai':
         size = '1024x1536' if aspect in ('9:16', '3:4') else '1536x1024' if aspect in ('16:9', '4:3') else '1024x1024'
         body = dict(model=model, prompt=job['prompt'], size=size, n=1)
@@ -71,7 +71,7 @@ def image_generation(job):
             response = requests.post('https://api.openai.com/v1/images/generations', headers=headers, json=body, timeout=(30, 900))
         data = check(response).json()['data'][0]
         if not data.get('b64_json'):
-            raise RuntimeError('Seçilen görsel modeli base64 çıktı döndürmedi. GPT Image modeli seç.')
+            raise RuntimeError('The selected image model did not return base64 output. Choose a GPT Image model.')
         pixels = decode_image_payload(data['b64_json'])
     elif provider == 'gemini':
         parts = [{'text': job['prompt']}]
@@ -85,10 +85,10 @@ def image_generation(job):
         outputs = result.get('candidates', [{}])[0].get('content', {}).get('parts', [])
         data = next((p.get('inlineData') or p.get('inline_data') for p in outputs if p.get('inlineData') or p.get('inline_data')), None)
         if not data:
-            raise RuntimeError('API görsel üretmedi: ' + ' '.join(p.get('text', '') for p in outputs)[:300])
+            raise RuntimeError('The API produced no image: ' + ' '.join(p.get('text', '') for p in outputs)[:300])
         pixels = decode_image_payload(data['data'])
     else:
-        raise ValueError('Bu sağlayıcı görsel üretimini desteklemiyor.')
+        raise ValueError('This provider does not support image generation.')
     directory = ROOT / 'outputs' / 'images'
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f'mamidlabs-{uuid.uuid4().hex[:12]}.png'
@@ -96,15 +96,15 @@ def image_generation(job):
         image.save(path, 'PNG')
         width, height = image.size
     emit('image', str(path), dict(width=width, height=height, prompt=job['prompt'], mode=job.get('mode', 'yeni'), provider=provider))
-    emit('status', 'Görsel hazır.')
+    emit('status', 'Image ready.')
 
 def video_generation(job):
     provider, key, model = job['provider'], job['apiKey'], job['model']
     if job.get('mode') not in ('metin', 'gorsel'):
-        raise ValueError('API sağlayıcıları yalnızca metinden veya görselden video üretimini destekler.')
+        raise ValueError('API providers only support text-to-video or image-to-video generation.')
     aspect = job.get('aspect', '16:9')
     if aspect not in ('16:9', '9:16'):
-        raise ValueError('Video API için 16:9 veya 9:16 seç.')
+        raise ValueError('Choose 16:9 or 9:16 for the video API.')
     source = job.get('sourceFile') if job.get('mode') == 'gorsel' else None
     headers = {'Authorization': f'Bearer {key}'}
     prompt = job['prompt']
@@ -127,22 +127,22 @@ def video_generation(job):
         response = requests.post(base + '/videos', headers=headers,
             json=dict(model=model, prompt=prompt, extra_body={'google': options}), timeout=(30, 180))
     else:
-        raise ValueError('Bu sağlayıcı video üretimini desteklemiyor.')
+        raise ValueError('This provider does not support video generation.')
     video = check(response).json()
     video_id = video.get('id')
     if not video_id:
-        raise RuntimeError('API video iş kimliği döndürmedi.')
+        raise RuntimeError('The API did not return a video job id.')
     # Saving only the public job ID makes a timeout diagnosable without logging credentials.
-    emit('status', f'{provider} video işi oluşturuldu: {video_id} · {seconds} sn')
+    emit('status', f'{provider} video job created: {video_id} · {seconds} s')
     deadline = time.monotonic() + 1800
     while video.get('status') not in ('completed', 'failed'):
         if time.monotonic() > deadline:
-            raise TimeoutError(f'Video işi hâlâ sürüyor: {video_id}. Hesabından kontrol et; yeniden otomatik oluşturulmadı.')
+            raise TimeoutError(f'The video job is still running: {video_id}. Check your account; it was not created again automatically.')
         time.sleep(5)
         video = check(requests.get(base + '/videos/' + quote(video_id, safe=''), headers=headers, timeout=(30, 60))).json()
-        emit('status', f'Video üretiliyor · {video.get("progress", 0)}% · {video_id}')
+        emit('status', f'Generating video · {video.get("progress", 0)}% · {video_id}')
     if video['status'] == 'failed':
-        raise RuntimeError('Video API üretimi başarısız: ' + str(video.get('error', 'Bilinmeyen neden')))
+        raise RuntimeError('The video API generation failed: ' + str(video.get('error', 'Unknown reason')))
     if provider == 'openai':
         url = base + '/videos/' + quote(video_id, safe='') + '/content'
         download_headers = headers
@@ -150,7 +150,7 @@ def video_generation(job):
         url = video.get('url', '')
         parsed = urlparse(url)
         if parsed.scheme != 'https' or not any(parsed.hostname == h or (parsed.hostname or '').endswith('.' + h) for h in ('googleapis.com', 'googleusercontent.com')):
-            raise ValueError('API beklenen Google video indirme adresini döndürmedi.')
+            raise ValueError('The API did not return the expected Google video download address.')
         download_headers = {'x-goog-api-key': key} if (parsed.hostname or '').endswith('googleapis.com') else {}
     directory = ROOT / 'outputs' / 'videolar'
     directory.mkdir(parents=True, exist_ok=True)
@@ -162,14 +162,14 @@ def video_generation(job):
                 for chunk in response.iter_content(1024 * 1024):
                     total += len(chunk)
                     if total > MAX_VIDEO_BYTES:
-                        raise ValueError('API video yaniti boyut sinirini asti.')
+                        raise ValueError('The API video response exceeded the size limit.')
                     output.write(chunk)
     except Exception:
         if path.exists():
             path.unlink()
         raise
     emit('video', str(path), dict(prompt=prompt, seconds=seconds, mode=job.get('mode'), provider=provider, thumbnail=''))
-    emit('status', 'Video hazır.')
+    emit('status', 'Video ready.')
 
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
@@ -177,11 +177,11 @@ def main():
     job = json.load(sys.stdin)
     try:
         if not job.get('apiKey') or not job.get('model'):
-            raise ValueError('Üretim sağlayıcısının API anahtarını ve model adını ayarlardan gir.')
+            raise ValueError('Enter the API key and model name of the generation provider in the settings.')
         (image_generation if job['kind'] == 'image' else video_generation)(job)
     except Exception as exc:
         # Provider/network exceptions must never echo credentials.
-        message = str(exc).replace(job.get('apiKey', '') or '\0', '[gizli]')
+        message = str(exc).replace(job.get('apiKey', '') or '\0', '[redacted]')
         emit('error', message[:900])
 
 if __name__ == '__main__': main()

@@ -1,15 +1,15 @@
-"""MamidLabs yerel konusma + ses olayi dökum hatti.
+"""MamidLabs local speech + sound event transcription pipeline.
 
-Moduller:
-    config   tier = secili profil (lite/pro); VRAM yalnizca yedek (select_profile_for/select_profile)
-    audio    16 kHz mono WAV'a cevirme + parcalama
-    vad      Silero VAD konusma araliklari
-    asr      faster-whisper (Whisper large-v3-tr), halusinasyon filtreleri
-    events   AudioSet/AST ses olayi etiketleri (Turkce)
-    diarize  pyannote konusmaci ayrimi (opsiyonel)
-    merge    zaman damgasina gore birlestirme -> metin
-    main     hatti calistirir; txt + json yazar
+Modules:
+    config   tier = selected profile (lite/pro); VRAM is only a fallback (select_profile_for/select_profile)
+    audio    conversion to 16 kHz mono WAV + chunking
+    vad      Silero VAD speech ranges
+    asr      faster-whisper (Whisper large-v3-tr), hallucination filters
+    events   AudioSet/AST sound event labels
+    diarize  pyannote speaker diarisation (optional)
+    merge    chronological merge -> text
+    main     runs the pipeline; writes txt + json
 """
-# Paket (agent\transcriber) surumu; uygulamanin surumunden (packaging\windows\mamidlabs.iss
-# MyAppVersion) BAGIMSIZDIR, onunla eslesmek zorunda degildir.
+# Package (agent\transcriber) version; INDEPENDENT of the application version
+# (packaging\windows\mamidlabs.iss MyAppVersion) and does not have to match it.
 __version__ = '1.0.0'

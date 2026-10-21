@@ -1,15 +1,15 @@
-"""Calisma profili: SECILI dil-modeli profilini ('lite' / 'pro') ses hatti tier'ina cevirir.
+"""Runtime profile: turns the SELECTED language-model profile ('lite' / 'pro') into an audio-pipeline tier.
 
-Tek kod tabani, iki profil. Tek fark: Whisper'in compute_type'i ve modellerin ayni anda
-mi (paralel) yoksa sirayla mi yuklendigi.
+One codebase, two profiles. The only difference: Whisper's compute_type and whether the models are
+loaded at the same time (in parallel) or one after another.
 
-- pro (MAX/FLASH): float16, modeller ayni anda bellekte.
-- lite: int8_float16, modeller sirayla; uzun kayitlar parcalanir.
+- pro (MAX/FLASH): float16, models in memory at the same time.
+- lite: int8_float16, models one after another; long recordings are split.
 
-Arayuz SECILI profili isciye gecirir (`select_profile_for`); boylece LITE ve PRO ayri
-davranir. Yalnizca arayuz disi (CLI) kullanimda profil adi verilmezse tier'i makinenin
-toplam VRAM'i belirler (`select_profile`). Cihaz/swap karari yine GERCEK bos VRAM ve sistem
-RAM'ine gore verilir (`choose_plan`).
+The UI passes the SELECTED profile to the worker (`select_profile_for`), so LITE and PRO behave
+differently. On the CLI, when no profile name is given, the tier is determined by the machine's
+total VRAM (`select_profile`). The device/swap decision is still made from the REAL free VRAM and
+system RAM (`choose_plan`).
 """
 from __future__ import annotations
 
@@ -22,72 +22,74 @@ from dataclasses import dataclass, replace
 # runs on the CPU here; the device choosers below short-circuit to 'cpu'.
 IS_MACOS = sys.platform == 'darwin'
 
-# Tier adlari artik SECILI profil ile aynidir: 'lite' ve 'pro'. Eski donanim adlari
-# ('pc1'/'pc2') ve arayuz profil adlari ('max'/'flash') es anlamli takma adlardir; boylece
-# eski cagrilar (CLI `--profile pc2`) bozulmaz.
+# Tier names are now the same as the SELECTED profile: 'lite' and 'pro'. The old hardware names
+# ('pc1'/'pc2') and the UI profile names ('max'/'flash') are synonymous aliases, so old callers
+# (CLI `--profile pc2`) keep working.
 PC1 = 'lite'
 PC2 = 'pro'
 VRAM_THRESHOLD_MIB = 14000
-# Arayuz profil adi -> tier. Profil ADI tier'i BELIRLER; VRAM yalnizca ad yoksa yedektir.
+# UI profile name -> tier. The profile NAME decides the tier; VRAM is only a fallback when the
+# name is missing.
 TIER_ALIASES = {
     'lite': PC1, 'pc1': PC1,
     'pro': PC2, 'max': PC2, 'flash': PC2, 'pc2': PC2,
 }
 
-# --- Otomatik cihaz secimi (CPU / GPU) ---------------------------------------
-# GPU'da dökum yapilirken yerel dil modeli VRAM'den bosaltilir ve sonra geri yuklenir
-# (swap). Bu swap'in sabit bir maliyeti vardir; CPU'da dökum ise GPU'dan yavastir ama
-# swap maliyeti YOKTUR. Kisa kayitlarda swap maliyeti dökum kazancindan buyuk olur:
+# --- Automatic device selection (CPU / GPU) -----------------------------------
+# When transcribing on the GPU the local language model is evicted from VRAM and then loaded back
+# (swap). That swap has a fixed cost; transcribing on the CPU is slower than the GPU but has NO
+# swap cost. For short recordings the swap cost exceeds the transcription gain:
 #
-#     GPU_döküm + swap_maliyeti > CPU_döküm  ise  CPU secilir.
+#     GPU_transcription + swap_cost > CPU_transcription  =>  CPU is chosen.
 #
-# Esik SURESI asagidaki sabittir; olcum degisirse yalnizca bu satir guncellenir (ya da profil
-# bazinda `Profile.cpu_max_seconds` ile gecersiz kilinir).
+# The threshold is a DURATION, kept in the constant below; if the measurement changes only this
+# line is updated (or it is overridden per profile with `Profile.cpu_max_seconds`).
 #
-# AR-GE olcumu (RTX 5060 Ti 16 GB, Whisper large-v3-tr):
-#   CPU(d)  = 5,0  + 0,908*d   (model yukleme 5 sn; dokum ~gercek zamanli)
-#   GPU(d)  = 14,0 + 3,3 + 0,079*d   (swap = boşalt 3 + geri yükle 11; model yukleme 3,3)
-#   Kesisim: d = (14 + 3,3 - 5,0) / (0,908 - 0,079) ~= 15 sn
-# Guvenlik payi + ilk-is CUDA bagi icin 20 sn secildi (pro; eski ad PC2). LITE swap'i daha kisa olculdu
-# (boşalt 3 + geri yukle 6 = ~9 sn) ve LITE'ta 9B model ~6 sn'de yuklendigi icin esik biraz
-# daha dusuk tutulur (Profile.cpu_max_seconds = 15; bkz. PROFILES). Her iki profilde de
-# "kisa -> CPU, uzun -> GPU + swap" mantigi gecerlidir.
+# R&D measurement (RTX 5060 Ti 16 GB, Whisper large-v3-tr):
+#   CPU(d)  = 5.0  + 0.908*d   (model load 5 s; transcription ~real time)
+#   GPU(d)  = 14.0 + 3.3 + 0.079*d   (swap = evict 3 + reload 11; model load 3.3)
+#   Intersection: d = (14 + 3.3 - 5.0) / (0.908 - 0.079) ~= 15 s
+# 20 s was chosen for the safety margin + the first-job CUDA warm-up (pro; old name PC2). LITE's
+# swap was measured shorter (evict 3 + reload 6 = ~9 s) and the 9B model loads in ~6 s on LITE, so
+# the threshold is kept a little lower (Profile.cpu_max_seconds = 15; see PROFILES). On both
+# profiles the "short -> CPU, long -> GPU + swap" logic holds.
 DEFAULT_CPU_MAX_SECONDS = 20.0
 
-# LITE (8 GB kart) CPU/GPU esigi. LITE swap'i daha kisa olculdu (~9-14 sn); kesim noktasi
-# d = (swap - 1,7) / 0,831 ~= 9-15 sn. Guvenlik payiyla 15 sn secildi. Sayisal hukmu veren
-# olcum ajani sonucu gelmediginde mevcut AR-GE degeri kullanilir; guvenli aralik 15-20 sn.
+# LITE (8 GB card) CPU/GPU threshold. LITE's swap was measured shorter (~9-14 s); the cut-off is
+# d = (swap - 1.7) / 0.831 ~= 9-15 s. 15 s was chosen with a safety margin. When the measurement
+# agent that gives the numeric verdict has not returned, the existing R&D value is used; the safe
+# range is 15-20 s.
 LITE_CPU_MAX_SECONDS = 15.0
 
-# Tek motor: Whisper large-v3'un Turkce ince ayarli CTranslate2 (float16) surumu.
+# Single engine: the Turkish fine-tuned CTranslate2 (float16) build of Whisper large-v3.
 DEFAULT_WHISPER_MODEL = 'oguzhangokboru/whisper-large-v3-tr'
-# AudioSet tabanli ses olayi modeli (AST). 'none' ile kapatilir.
+# AudioSet-based sound event model (AST). Disabled with 'none'.
 DEFAULT_EVENTS_MODEL = 'MIT/ast-finetuned-audioset-10-10-0.4593'
 
-# --- Ses hatti bellek gereksinimleri (MiB) -----------------------------------
-# Cihaz/swap karari PROFIL ADINA gore DEGIL, ses isi baslarken olculen GERCEK bos
-# VRAM ve sistem RAM'ine gore verilir (bkz. choose_plan). LITE profili hem 8 GB
-# (hedef makine) hem 16 GB kartta kullanildigi icin profil adi tek basina yeterli
-# degildir.
+# --- Audio pipeline memory requirements (MiB) --------------------------------
+# The device/swap decision is NOT based on the PROFILE NAME but on the REAL free VRAM and system RAM
+# measured when the audio job starts (see choose_plan). The LITE profile is used on both 8 GB (the
+# target machine) and 16 GB cards, so the profile name alone is not enough.
 #
-# `audio_vram_mib`: Whisper large-v3 + AST + torch/CUDA baglami icin gereken en kotu
-# senaryo payi. Olculen: int8_float16 large-v3 ~1,5-2,5 GB, AST (fp32) ~0,4 GB,
-# torch/CUDA baglami ~0,3-0,5 GB; pro (eski ad PC2) float16'da Whisper ~2,9 GB'a cikar.
+# `audio_vram_mib`: the worst-case headroom needed for Whisper large-v3 + AST + the torch/CUDA
+# context. Measured: int8_float16 large-v3 ~1.5-2.5 GB, AST (fp32) ~0.4 GB, torch/CUDA context
+# ~0.3-0.5 GB; on pro (old name PC2) Whisper in float16 grows to ~2.9 GB.
 DEFAULT_AUDIO_VRAM_MIB = 4096
-# `audio_ram_mib`: CPU yolunda (swap yok) ses hattinin sistem RAM'inde tuttugu en
-# kotu senaryo payi: Whisper int8 (~2 GB) + AST (fp32 ~0,4 GB) + torch/Python
-# (~0,8 GB) + parca/cozumleme tamponlari (30 dk float32 ~0,15 GB; parcali dökum).
+# `audio_ram_mib`: on the CPU path (no swap) the worst-case headroom the audio pipeline keeps in
+# system RAM: Whisper int8 (~2 GB) + AST (fp32 ~0.4 GB) + torch/Python (~0.8 GB) + chunk/decode
+# buffers (30 min float32 ~0.15 GB; chunked transcription).
 DEFAULT_AUDIO_RAM_MIB = 5120
 
-# LITE (8 GB kart) CPU co-resident ses hatti RAM esigi. IKI OLCUM CELISTI; daha KESIN olan
-# (LM + ASR CPU'yu BIRLIKTE gercekten kosturan olcum-2) sonucu: co-resident **SIGMIYOR**.
-# Fiziksel RAM 15,25 GB; LM yukluyken gereksinim ~16,1 GB (marj sifir/negatif; tepe
-# ~15.127/15.611 MB, yalniz ~489 MB bos). OOM olmasa bile LM'in ~6,1 GB model sayfasi geri
-# kazanilabilir onbellekten atilip bir SONRAKI sohbet turunda diskten yeniden okunuyor
-# (yavaslama). Bu yuzden LITE, PRO ile AYNI guvenli kapiyi kullanir: esik **5.120 MiB**
-# (gercek ASR ihtiyaci ~3,8 GB olsa da, dil modeliyle BIRLIKTE ~16 GB gerektiginden guvenli
-# kapi budur). LM yukluyken (bu makinede) choose_plan CPU dalini SECMEZ -> GPU + swap;
-# bol RAM'li bir makinede kisa kayit yine CPU co-resident olabilir.
+# LITE (8 GB card) CPU co-resident audio pipeline RAM threshold. TWO MEASUREMENTS CONFLICTED; the
+# more CONCLUSIVE one (measurement-2, which actually ran LM + ASR on the CPU TOGETHER) concluded:
+# co-resident **DOES NOT FIT**. Physical RAM 15.25 GB; with the LM loaded the requirement is ~16.1 GB
+# (zero/negative margin; peak ~15,127/15,611 MB, only ~489 MB free). Even without an OOM, the LM's
+# ~6.1 GB model pages are evicted from the reclaimable cache and re-read from disk on the NEXT chat
+# turn (slowdown). So LITE uses the SAME safe gate as PRO: threshold **5,120 MiB** (although the
+# real ASR requirement is ~3.8 GB, ~16 GB is needed TOGETHER with the language model, which is why
+# this is the safe gate). With the LM loaded (on this machine) choose_plan does not choose the CPU
+# branch -> GPU + swap; on a machine with plenty of RAM a short recording can still be CPU
+# co-resident.
 LITE_AUDIO_RAM_MIB = DEFAULT_AUDIO_RAM_MIB
 
 
@@ -96,16 +98,16 @@ class Profile:
     name: str
     compute_type: str      # faster-whisper compute_type ('float16' | 'int8_float16')
     load_mode: str         # 'parallel' | 'sequential'
-    chunk_minutes: int     # uzun kayitlari bolme; 0 = bolme
+    chunk_minutes: int     # split long recordings; 0 = no split
     whisper_model: str
     events_model: str      # 'ast' | 'none'
     language: str
     events: bool
     diarize: bool
-    auto_device: bool = True          # cihaz secimini kaydin suresine gore otomatik yap
-    cpu_max_seconds: float | None = None  # bu sureden kisa kayitlarda CPU (None -> DEFAULT_CPU_MAX_SECONDS)
-    audio_vram_mib: int = DEFAULT_AUDIO_VRAM_MIB  # ses hatti dil modeliyle birlikte bu kadar bos VRAM istar
-    audio_ram_mib: int = DEFAULT_AUDIO_RAM_MIB    # CPU yolunda ses hatti bu kadar sistem RAM'i ister
+    auto_device: bool = True          # pick the device automatically from the recording duration
+    cpu_max_seconds: float | None = None  # CPU for recordings shorter than this (None -> DEFAULT_CPU_MAX_SECONDS)
+    audio_vram_mib: int = DEFAULT_AUDIO_VRAM_MIB  # free VRAM the audio pipeline wants alongside the language model
+    audio_ram_mib: int = DEFAULT_AUDIO_RAM_MIB    # system RAM the audio pipeline wants on the CPU path
 
 
 PROFILES = {
@@ -118,13 +120,13 @@ PROFILES = {
         name=PC1, compute_type='int8_float16', load_mode='sequential', chunk_minutes=30,
         whisper_model=DEFAULT_WHISPER_MODEL, events_model=DEFAULT_EVENTS_MODEL,
         language='tr', events=True, diarize=True,
-        # LITE ASR politikasi: CPU co-resident YALNIZCA kayit `cpu_max_seconds`ten KISA VE
-        # sistem RAM'i yetiyorsa secilir (dil modeli VRAM'de kalir, ses modeli CPU/sistem
-        # RAM'inde kosar; swap YOK). Uzun kayit ya da RAM yetersizliginde GPU + mecburi swap
-        # (swap maliyeti ~9-14 sn olsa da GPU dokumu cok daha hizli oldugu icin toplam sure
-        # daha kisa; bkz. choose_plan). Esik LITE_CPU_MAX_SECONDS (15 sn); CPU dali icin
-        # aranan sistem RAM'i LITE_AUDIO_RAM_MIB (5.120 MiB; olcum-2: LM ile BIRLIKTE
-        # co-resident SIGMIYOR -> bu makinede pratikte GPU + swap).
+        # LITE ASR policy: CPU co-resident is chosen ONLY when the recording is SHORTER than
+        # `cpu_max_seconds` AND system RAM suffices (the language model stays in VRAM, the audio
+        # model runs on the CPU/in system RAM; NO swap). For a long recording or insufficient RAM,
+        # GPU + mandatory swap (although the swap costs ~9-14 s, the GPU transcription is so much
+        # faster that the total is shorter; see choose_plan). Threshold LITE_CPU_MAX_SECONDS (15 s);
+        # the system RAM required for the CPU branch is LITE_AUDIO_RAM_MIB (5,120 MiB; measurement-2:
+        # co-resident TOGETHER with the LM DOES NOT FIT -> in practice GPU + swap on this machine).
         cpu_max_seconds=LITE_CPU_MAX_SECONDS,
         audio_ram_mib=LITE_AUDIO_RAM_MIB,
     ),
@@ -132,7 +134,7 @@ PROFILES = {
 
 
 def _macos_total_mib() -> int:
-    """macOS'ta toplam birlesik bellek (MiB). Okunamazsa 0."""
+    """Total unified memory on macOS (MiB). 0 when it cannot be read."""
     try:
         out = subprocess.run(['sysctl', '-n', 'hw.memsize'], capture_output=True,
                              text=True, timeout=10).stdout.strip()
@@ -142,7 +144,7 @@ def _macos_total_mib() -> int:
 
 
 def _macos_available_mib() -> int:
-    """macOS'ta geri kazanilabilir birlesik bellek (MiB): free+inactive+speculative+purgeable."""
+    """Reclaimable unified memory on macOS (MiB): free+inactive+speculative+purgeable."""
     try:
         pagesize = int(subprocess.run(['sysctl', '-n', 'hw.pagesize'], capture_output=True,
                                       text=True, timeout=10).stdout.strip() or 4096)
@@ -165,10 +167,10 @@ def _macos_available_mib() -> int:
 
 
 def total_vram_mib() -> int:
-    """En buyuk kartin toplam VRAM'i (MiB). Yoksa 0 (-> lite (eski ad PC1) profili).
+    """Total VRAM of the largest card (MiB). 0 when there is none (-> lite (old name PC1) profile).
 
-    macOS'ta ayri VRAM yoktur; birlesik bellegin tamami donanim butcesidir, bu yuzden
-    `hw.memsize` dondurulur (profil secimi icin makul esik saglar).
+    macOS has no separate VRAM; the whole unified memory is the hardware budget, so
+    `hw.memsize` is returned (it provides a reasonable threshold for profile selection).
     """
     if IS_MACOS:
         return _macos_total_mib()
@@ -184,9 +186,9 @@ def total_vram_mib() -> int:
 
 
 def free_vram_mib() -> int:
-    """En buyuk kartin BOS VRAM'i (MiB). Yoksa 0.
+    """FREE VRAM of the largest card (MiB). 0 when there is none.
 
-    macOS'ta birlesik bellekten geri kazanilabilir sayfalar dondurulur.
+    On macOS the reclaimable pages of unified memory are returned.
     """
     if IS_MACOS:
         return _macos_available_mib()
@@ -202,7 +204,7 @@ def free_vram_mib() -> int:
 
 
 def available_ram_mib() -> int:
-    """Kullanilabilir (bos) sistem RAM'i MiB. Okunamazsa 0."""
+    """Available (free) system RAM in MiB. 0 when it cannot be read."""
     if IS_MACOS:
         return _macos_available_mib()
     if os.name == 'nt':
@@ -240,7 +242,7 @@ def available_ram_mib() -> int:
 
 
 def select_profile(total_mib: int | None = None, **overrides) -> Profile:
-    """Toplam VRAM'e gore profil secer (yalnizca profil adi verilmediginde / CLI yedegi)."""
+    """Select a profile by total VRAM (only when no profile name is given / CLI fallback)."""
     total = total_vram_mib() if total_mib is None else int(total_mib)
     profile = PROFILES[PC2] if total >= VRAM_THRESHOLD_MIB else PROFILES[PC1]
     clean = {k: v for k, v in overrides.items() if v is not None and hasattr(profile, k)}
@@ -248,15 +250,15 @@ def select_profile(total_mib: int | None = None, **overrides) -> Profile:
 
 
 def resolve_tier(name: str | None) -> str | None:
-    """Profil adini tier anahtarina cevirir ('lite'/'pro'); taninmiyorsa None."""
+    """Turn a profile name into a tier key ('lite'/'pro'); None when unrecognised."""
     return TIER_ALIASES.get((name or '').strip().lower())
 
 
 def select_profile_for(name: str | None, **overrides) -> Profile:
-    """Uygulamanin SECILI profil adina gore tier secer; ad onceliklidir.
+    """Select the tier for the application's SELECTED profile name; the name takes priority.
 
-    'lite' -> LITE, 'pro'/'max'/'flash' -> PRO. Ad taninmiyorsa (ya da bos) tier'i makinenin
-    toplam VRAM'i belirleyen `select_profile`e duser.
+    'lite' -> LITE, 'pro'/'max'/'flash' -> PRO. When the name is unrecognised (or empty) it falls
+    back to `select_profile`, where the machine's total VRAM decides the tier.
     """
     tier = resolve_tier(name)
     if tier is None:
@@ -268,20 +270,20 @@ def select_profile_for(name: str | None, **overrides) -> Profile:
 
 def choose_device(duration_seconds: float | None, profile: Profile, need_swap: bool,
                   cpu_max_seconds: float | None = None) -> str:
-    """Kaydin suresine gore 'cuda' ya da 'cpu' secer.
+    """Choose 'cuda' or 'cpu' from the recording duration.
 
-    Kural (bkz. DEFAULT_CPU_MAX_SECONDS):
-      - need_swap=False: VRAM swap maliyeti yok (orn. API saglayici ya da LITE; dil modeli
-        ses hattiyla birlikte sigar) -> her zaman 'cuda'.
-      - need_swap=True: GPU dökumunde dil modeli bosaltilip geri yuklenir (swap). Kayit
-        `esik` saniyeden KISAYSA swap maliyeti dökum kazancindan buyuk oldugu icin 'cpu';
-        aksi halde 'cuda'.
+    Rule (see DEFAULT_CPU_MAX_SECONDS):
+      - need_swap=False: no VRAM swap cost (e.g. an API provider or LITE; the language model fits
+        together with the audio pipeline) -> always 'cuda'.
+      - need_swap=True: a GPU transcription evicts the language model and loads it back (swap). If
+        the recording is SHORTER than `threshold` seconds the swap cost exceeds the transcription
+        gain, so 'cpu'; otherwise 'cuda'.
 
-    Esik: verilirse `cpu_max_seconds`, yoksa `profile.cpu_max_seconds`, o da yoksa
-    `DEFAULT_CPU_MAX_SECONDS`. Sure okunamazsa (None) guvenli varsayilan 'cuda'dir.
+    Threshold: `cpu_max_seconds` when given, else `profile.cpu_max_seconds`, else
+    `DEFAULT_CPU_MAX_SECONDS`. When the duration cannot be read (None) the safe default is 'cuda'.
 
-    NOT: Uygulama yolu (arayuz/isci) cihaz/swap kararini `choose_plan` ile verir; bu fonksiyon
-    yalnizca CLI'in `--device auto` akisi icin korunmustur.
+    NOTE: the application path (UI/worker) makes the device/swap decision with `choose_plan`; this
+    function is kept only for the CLI's `--device auto` flow.
     """
     if IS_MACOS:
         return 'cpu'
@@ -301,32 +303,33 @@ def choose_plan(profile: Profile, duration_seconds: float | None = None,
                 vram_free_mib: int | None = None, ram_free_mib: int | None = None,
                 local_model_loaded: bool = True,
                 cpu_max_seconds: float | None = None) -> tuple[str, bool]:
-    """Ses hatti icin (device, need_swap) planini ONCELIK sirasiyla doner.
+    """Return the (device, need_swap) plan for the audio pipeline, in order of PREFERENCE.
 
-    Tier (`profile`) SECILI profil adindan gelir (lite/pro); cihaz/swap karari ise tier'in
-    bellek esikleri + GERCEK bos VRAM + sistem RAM'i ve kaydin SURESINE gore verilir:
+    The tier (`profile`) comes from the SELECTED profile name (lite/pro); the device/swap decision
+    is made from the tier's memory thresholds + the REAL free VRAM + system RAM and the recording
+    DURATION:
 
-      1) Whisper + AST, yerel dil modeliyle BIRLIKTE bos VRAM'e sigarsa (`audio_vram_mib`)
-         -> ('cuda', False): GPU'da dökum, swap YOK (en hizli, maliyetsiz).
-      2) Sigmazsa ve CPU co-resident kosulu saglaniyorsa -> ('cpu', False): dil modeli VRAM'de
-         KALIR, ses modeli CPU/sistem RAM'inde kosar (swap YOK; yavastir). Kosul: kayit
-         `esik` saniyeden KISA **VE** ses hatti sistem RAM'ine sigiyor (`audio_ram_mib`;
-         LITE ve PRO 5.120 MiB).
-         Kisa kayitta swap maliyeti dökum kazancindan buyuktur. Esik: `cpu_max_seconds` /
-         `profile.cpu_max_seconds` / `DEFAULT_CPU_MAX_SECONDS` (LITE 15 sn, PRO 20 sn).
-      3) Aksi halde (kayit UZUN ya da RAM yetmiyor) -> ('cuda', True): GPU dökumu. Dil modeli
-         MECBURI boşaltilir/geri yuklenir (swap); uzun kayitta GPU kazanci swap maliyetini
-         asar, RAM yetmezse zaten kaçınılmazdir.
+      1) If Whisper + AST fit into free VRAM TOGETHER with the local language model
+         (`audio_vram_mib`) -> ('cuda', False): GPU transcription, NO swap (fastest, free).
+      2) If they do not fit and CPU co-resident conditions are met -> ('cpu', False): the language
+         model STAYS in VRAM, the audio model runs on the CPU/in system RAM (NO swap; it is slow).
+         Condition: the recording is SHORTER than `threshold` seconds **AND** the audio pipeline
+         fits into system RAM (`audio_ram_mib`; LITE and PRO 5,120 MiB).
+         On a short recording the swap cost exceeds the transcription gain. Threshold:
+         `cpu_max_seconds` / `profile.cpu_max_seconds` / `DEFAULT_CPU_MAX_SECONDS` (LITE 15 s, PRO 20 s).
+      3) Otherwise (a LONG recording or not enough RAM) -> ('cuda', True): GPU transcription. The
+         language model is MANDATORILY evicted/reloaded (swap); on a long recording the GPU gain
+         exceeds the swap cost, and if RAM is short it is unavoidable anyway.
 
-    Sure bilinmiyorsa (duration_seconds=None) swap ZORLANMAZ; yalnizca bellek kurali
-    uygulanir (RAM yetiyorsa CPU, yetmiyorsa mecburi swap). Boylece tek bir kayit icin
-    gereksiz dil-modeli boşalt/geri yukle yapilmaz.
+    When the duration is unknown (duration_seconds=None) a swap is NOT FORCED; only the memory rule
+    applies (CPU if RAM suffices, mandatory swap otherwise). This avoids an unnecessary language
+    model evict/reload for a single recording.
 
-    Yerel dil modeli yuklu degilse (API saglayicisi) GPU zaten bostur -> ('cuda', False).
-    CPU yolu hicbir zaman ZORLAMA degildir: secilen cihaz basarisiz olursa isci katmani CPU
-    yedegine duser; GPU hic yoksa (CUDA/nvidia-smi yok) CPU son care olarak kalir.
-    `vram_free_mib`/`ram_free_mib` verilmezse makineden okunur (olculemezse 0 -> guvenli
-    taraf: sigmiyor sayilir).
+    When the local language model is not loaded (API provider) the GPU is already free ->
+    ('cuda', False). The CPU path is never MANDATORY: if the chosen device fails the worker layer
+    falls back to the CPU; if there is no GPU at all (no CUDA/nvidia-smi) the CPU remains the last
+    resort. When `vram_free_mib`/`ram_free_mib` are not given they are read from the machine (0 when
+    unmeasurable -> the safe side: treated as not fitting).
     """
     if IS_MACOS:
         # No CUDA: always CPU, no language-model swap (there is nothing to free).
@@ -345,8 +348,9 @@ def choose_plan(profile: Profile, duration_seconds: float | None = None,
         threshold = profile.cpu_max_seconds
     if threshold is None:
         threshold = DEFAULT_CPU_MAX_SECONDS
-    # CPU co-resident YALNIZCA kayit esikten KISA VE RAM yetiyorsa. Sure bilinmiyorsa swap
-    # zorlanmaz (bellek kurali): tek bir kayit icin gereksiz dil-modeli swap'i yapilmaz.
+    # CPU co-resident ONLY when the recording is SHORTER than the threshold AND RAM suffices. When
+    # the duration is unknown a swap is not forced (memory rule): no unnecessary language-model swap
+    # for a single recording.
     if ram_ok and (duration_seconds is None or duration_seconds <= threshold):
         return 'cpu', False
     return 'cuda', True

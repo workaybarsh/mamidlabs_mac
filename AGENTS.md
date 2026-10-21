@@ -1,482 +1,472 @@
-# MamidLabs · Geliştirici ve yapay zekâ ajanları için altyapı rehberi (macOS)
+# MamidLabs · Infrastructure guide for developers and AI agents (macOS)
 
-Bu dosya MamidLabs macOS sürümü üzerinde çalışan geliştiriciler ve yapay zekâ
-ajanları için tek doğru kaynaktır. Kod tabanının nasıl başlatıldığını, parçaların
-nasıl konuştuğunu, nerede ne durduğunu ve bilinen tuzakları anlatır.
+This file is the single source of truth for developers and AI agents working on the MamidLabs
+macOS edition. It explains how the codebase is started, how the parts talk to each other,
+where everything lives, and the known pitfalls.
 
-> **Zorunlu kural:** Yeni bir özellik eklediğinde, bir davranışı değiştirdiğinde ya
-> da yeni bir tuzak bulduğunda **aynı commit'te** bu dosyayı güncelle: ilgili
-> bölümü düzelt ve en alttaki [Değişiklik günlüğü](#15-değişiklik-günlüğü)'ne bir
-> satır ekle. Kullanıcıya görünen değişiklikler `CHANGELOG.md`'ye de yazılır. Kod
-> ile bu dosya çelişirse **kod doğrudur**; çelişkiyi fark eden bu dosyayı düzeltir.
+> **Mandatory rule:** when you add a feature, change a behaviour or find a new pitfall,
+> update this file **in the same commit**: fix the relevant section and add a line to the
+> [changelog](#15-changelog) at the bottom. User-visible changes are also written to
+> `CHANGELOG.md`. If code and this file disagree, **the code is right**; whoever notices the
+> conflict fixes this file.
 
-Kullanıcıyla iletişim dili **Türkçe**dir. Kod yorumları ve betik metinleri Türkçedir.
+The language of communication with the user is **English**. Code comments and script texts
+are English.
 
 ---
 
-## 1. Ürün tek paragrafta
+## 1. The product in one paragraph
 
-MamidLabs, macOS'ta tamamen yerel çalışan çok modlu bir yapay zekâ çalışma
-alanıdır. Tek bir Qt6 penceresinde sohbet, web araması, belge okuma/üretimi, OCR,
-görsel anlama, görsel üretimi, fotoğraf düzenleme, video üretimi, grafik çizimi ve
-ses dökümü sunar. Dil modeli `llama.cpp` (`llama-server`), görsel/video modelleri
-`ComfyUI` üzerinde, Mac'in **Metal** hızlandırıcısında çalışır (llama.cpp Metal;
-torch/ComfyUI MPS). OpenAI, Claude, Gemini, DeepSeek ve OpenAI uyumlu özel uçlar
-isteğe bağlı API sağlayıcılarıdır. Depo: `github.com/workaybarsh/mamidlabs_mac`.
-Varsayılan kurulum kökü `~/Library/Application Support/mamidlabs`.
+MamidLabs is a multimodal AI workspace that runs fully locally on macOS. In a single Qt6
+window it offers chat, web search, document reading/creation, OCR, image understanding, image
+generation, photo editing, video generation, chart drawing and audio transcription. The
+language model runs on `llama.cpp` (`llama-server`), the image/video models on `ComfyUI`,
+using the Mac's **Metal** accelerator (llama.cpp Metal; torch/ComfyUI MPS). OpenAI, Claude,
+Gemini, DeepSeek and custom OpenAI-compatible endpoints are optional API providers.
+Repository: `github.com/workaybarsh/mamidlabs_mac`. The default install root is
+`~/Library/Application Support/mamidlabs`.
 
-Bu sürüm, Windows sürümünün (`MamidLabsTR` / `MamidLabsENG`) **macOS portudur**:
-WinForms/PowerShell yerine **Python 3.12 + PySide6 (Qt6)**. Sabitler, davranışlar
-ve araç kümesi Windows sürümüyle birebir tutulur.
+This edition is the **macOS port** of the Windows edition (`MamidLabsTR` / `MamidLabsENG`):
+**Python 3.12 + PySide6 (Qt6)** instead of WinForms/PowerShell. Constants, behaviours and the
+tool set are kept identical to the Windows edition.
 
-## 2. Depo haritası
+## 2. Repository map
 
-| Yol | İçerik |
+| Path | Contents |
 |---|---|
-| `mamidlabs/__main__.py` | Giriş noktası: `doctor`, `profiles`, `manage` alt komutları; aksi halde GUI |
-| `mamidlabs/ui/app.py` | Qt6 `QApplication` + ana pencere kurulumu |
-| `mamidlabs/ui/main_window.py` | Ana pencere, sohbet, profil/sağlayıcı seçicileri, çipler, `TurnWorker`/`ManageWorker` |
-| `mamidlabs/ui/settings_dialog.py` | API bağlantıları penceresi, anahtar doğrulama |
-| `mamidlabs/ui/theme.py` | Qt stil sayfası |
-| `mamidlabs/core/i18n.py` | Çalışma anı yerelleştirme (TR kaynak; EN geri düşer) |
-| `mamidlabs/locales/{tr,en}.json` | Arayüz metinleri (TR kaynak, EN çeviri) |
-| `mamidlabs/core/hwinfo.py` | Donanım ölçümü + profil önerisi (birleşik bellek; sihirbaz 5. adım) |
-| `mamidlabs/wizard/` | Kurulum sihirbazı: `__init__.py` (saf yardımcılar), `setup.py` (Qt6 `QWizard`, 13 sayfa), `__main__.py` (giriş + masaüstü denetimi) |
-| `mamidlabs/core/paths.py` | macOS kurulum kökü ve tüm yollar (`is_macos`, `default_root`) |
-| `mamidlabs/core/settings.py` | `api.json` deposu (atomik yazım, `0600`), `SecretStore`, `secret_backend` |
-| `mamidlabs/core/profiles.py` | Profil kataloğu, takma adlar, hedef yollar, eksik dosyalar |
-| `mamidlabs/core/providers.py` | Sağlayıcı tablosu, OpenAI ↔ Claude dönüştürücüleri, akış (SSE) |
-| `mamidlabs/core/manage.py` | `ModelManager`: başlat/durdur, bellek kapısı, `server_args`, ComfyUI/orphan temizliği, `FileLock` |
-| `mamidlabs/core/inference.py` | `InferenceEngine`: sohbet döngüsü, sistem istemi, araç döngüsü, onay, sıkıştırma, web dürüstlüğü |
-| `mamidlabs/core/tools.py` | `ToolRegistry` (kapılar + işleyiciler), `WebTracker`, `MediaBridge` |
-| `mamidlabs/core/chart.py` | matplotlib grafik üretimi + güvenli ifade çözümleyici |
-| `mamidlabs/core/runner.py` | `WorkerRunner`: işçileri JSON stdin/stdout ile çalıştırır |
-| `mamidlabs/workers/` | Platformdan bağımsız Python işçileri (aşağıya bakın) |
-| `scripts/install-mamidlabs.sh` | Aşamalı kurulum (Homebrew/Metal/MPS) |
-| `scripts/manage-mamidlabs.sh` | Model/ComfyUI yönetimi, doctor, profiles |
-| `scripts/uninstall-mamidlabs.sh` | Tam kaldırma (kök dışına dokunmaz) |
-| `scripts/smoke-test.sh` | Gerçek modellerle uçtan uca doğrulama |
-| `scripts/mamidlabs-setup.sh` | Kurulum sihirbazını başlatır (`python3 -m mamidlabs.wizard`) |
-| `packaging/macos/build-dmg.sh` | `.dmg` üretir (sihirbaz `.app`'i gömer); `packaging/macos/README.md` |
-| `packaging/Info.plist`, `packaging/MacOS-MamidLabs` | uygulama `.app` şablonları (`@VERSION@`, `@ROOT@` yer tutucuları) |
-| `packaging/macos/Info.plist`, `packaging/macos/MacOS-MamidLabsSetup` | sihirbaz `.app` şablonları |
-| `packaging/mamidlabs.png`, `packaging/mamidlabs.svg` | Simge (`.icns` derlemede üretilir) |
-| `requirements/{app,imagegen,asr,ocr}.txt` | Python paketleri (sabit sürümler) |
-| `tests/` | pytest (211 test; PySide6 gerektirmez) |
-| `docs/` | `kurulum.md`, `teknik-notlar.md` |
+| `mamidlabs/__main__.py` | Entry point: `doctor`, `profiles`, `manage` subcommands; otherwise the GUI |
+| `mamidlabs/ui/app.py` | Qt6 `QApplication` + main window setup |
+| `mamidlabs/ui/main_window.py` | Main window, chat, profile/provider selectors, chips, `TurnWorker`/`ManageWorker` |
+| `mamidlabs/ui/settings_dialog.py` | API connections window, key validation |
+| `mamidlabs/ui/theme.py` | Qt stylesheet |
+| `mamidlabs/core/i18n.py` | Runtime localisation (EN source; TR falls back) |
+| `mamidlabs/locales/{en,tr}.json` | Interface texts (EN source, TR translation) |
+| `mamidlabs/core/hwinfo.py` | Hardware measurement + profile recommendation (unified memory; wizard step 5) |
+| `mamidlabs/wizard/` | Setup wizard: `__init__.py` (pure helpers), `setup.py` (Qt6 `QWizard`, 13 pages), `__main__.py` (entry + desktop check) |
+| `mamidlabs/core/paths.py` | macOS install root and all paths (`is_macos`, `default_root`) |
+| `mamidlabs/core/settings.py` | `api.json` store (atomic write, `0600`), `SecretStore`, `secret_backend` |
+| `mamidlabs/core/profiles.py` | Profile catalog, aliases, target paths, missing files |
+| `mamidlabs/core/providers.py` | Provider table, OpenAI ↔ Claude converters, streaming (SSE) |
+| `mamidlabs/core/manage.py` | `ModelManager`: start/stop, memory gate, `server_args`, ComfyUI/orphan cleanup, `FileLock` |
+| `mamidlabs/core/inference.py` | `InferenceEngine`: chat loop, system prompt, tool loop, approval, compaction, web honesty |
+| `mamidlabs/core/tools.py` | `ToolRegistry` (gates + handlers), `WebTracker`, `MediaBridge` |
+| `mamidlabs/core/chart.py` | matplotlib chart generation + safe expression evaluator |
+| `mamidlabs/core/runner.py` | `WorkerRunner`: runs workers over JSON stdin/stdout |
+| `mamidlabs/workers/` | Platform-independent Python workers (see below) |
+| `scripts/install-mamidlabs.sh` | Staged installation (Homebrew/Metal/MPS) |
+| `scripts/manage-mamidlabs.sh` | Model/ComfyUI management, doctor, profiles |
+| `scripts/uninstall-mamidlabs.sh` | Complete uninstall (touches nothing outside the root) |
+| `scripts/smoke-test.sh` | End-to-end verification with real models |
+| `scripts/mamidlabs-setup.sh` | Launches the setup wizard (`python3 -m mamidlabs.wizard`) |
+| `packaging/macos/build-dmg.sh` | Produces the `.dmg` (embeds the wizard `.app`); `packaging/macos/README.md` |
+| `packaging/Info.plist`, `packaging/MacOS-MamidLabs` | application `.app` templates (`@VERSION@`, `@ROOT@` placeholders) |
+| `packaging/macos/Info.plist`, `packaging/macos/MacOS-MamidLabsSetup` | wizard `.app` templates |
+| `packaging/mamidlabs.png`, `packaging/mamidlabs.svg` | Icon (the `.icns` is generated at build time) |
+| `requirements/{app,imagegen,asr,ocr}.txt` | Python packages (pinned versions) |
+| `tests/` | pytest (203 tests; PySide6 not required) |
+| `docs/` | `install.md`, `technical-notes.md` |
 | `.github/workflows/tests.yml` | CI (macos-latest, Python 3.12) |
-| `.github/workflows/kurulum-paketi.yml` | Yayın: `v*` etiketinde `.dmg` derler, sabit adla (`MamidLabs.dmg`) GitHub Release'e yükler |
-| `AGENTS.md` | Bu rehber. Kurulum köküne kopyalanmaz. |
+| `.github/workflows/installer.yml` | Release: on a `v*` tag builds the `.dmg` and uploads it to the GitHub Release under a fixed name (`MamidLabs.dmg`) |
+| `AGENTS.md` | This guide. Not copied into the install root. |
 
-### İşçiler (`mamidlabs/workers/`)
+### Workers (`mamidlabs/workers/`)
 
-Tek-atımlık JSON stdin/stdout sözleşmesi. Her işçi kendi sanal ortamında çalışır.
+One-shot JSON stdin/stdout contract. Each worker runs in its own virtual environment.
 
-| İşçi | Ortam | İş |
+| Worker | Environment | Job |
 |---|---|---|
-| `mamidlabs-agent-tools.py` | app | Web araması (`ddgs`), sayfa okuma, referans görsel |
-| `office-tools.py` | app | PDF/Word/Excel/PPTX/ZIP/RAR okuma, PDF/DOCX/PPTX/XLSX üretimi |
+| `mamidlabs-agent-tools.py` | app | Web search (`ddgs`), page reading, reference image |
+| `office-tools.py` | app | PDF/Word/Excel/PPTX/ZIP/RAR reading, PDF/DOCX/PPTX/XLSX creation |
 | `ocr-tools.py` | ocr | PaddleOCR (CPU) |
-| `media-tools.py` | imagegen | Video kare çıkarma (PyAV) |
-| `api-media.py` | app | API ile görsel/video üretimi |
-| `hf-hub.py` | app | Hugging Face indirme (boyut + SHA256 doğrulamalı, kaldığı yerden sürer) |
-| `mtp_inject.py` | app | LITE GGUF'una MTP/nextn başlığı ekleme |
-| `whisper-tools.py` | asr | Ses dökümü (`transcriber/` paketini çağırır; macOS'ta CPU) |
-| `transcriber/` | asr | faster-whisper + AST + pyannote hattı |
-| `rag-tools.py` | app | Bağlı klasörde yerel (çevrimdışı) BM25 araması (`search_folder`) |
-| `_root.py` | — | İşçilerin kurulum kökünü okuması (`MAMIDLABS_ROOT` → Library) |
+| `media-tools.py` | imagegen | Video frame extraction (PyAV) |
+| `api-media.py` | app | Image/video generation through an API |
+| `hf-hub.py` | app | Hugging Face download (size + SHA256 verified, resumes where it stopped) |
+| `mtp_inject.py` | app | Adds the MTP/nextn header to the LITE GGUF |
+| `whisper-tools.py` | asr | Audio transcription (calls the `transcriber/` package; CPU on macOS) |
+| `transcriber/` | asr | faster-whisper + AST + pyannote pipeline |
+| `rag-tools.py` | app | Local (offline) BM25 search in the bound folder (`search_folder`) |
+| `_root.py` | — | Workers read the install root (`MAMIDLABS_ROOT` → Library) |
 
-## 3. Kurulum kökü düzeni
+## 3. Install root layout
 
 ```
 ~/Library/Application Support/mamidlabs/
-  llama.cpp/b10998/llama-server     sabit llama.cpp yapısı (Metal)
-  models/                           GGUF dil modelleri (+ mmproj)
-  ComfyUI/                          sabit commit; custom_nodes: ComfyUI-GGUF, comfyui-krea2edit
-  venv/{app,imagegen,asr,ocr}/      Python ortamları (bin/python)
+  llama.cpp/b10998/llama-server     pinned llama.cpp build (Metal)
+  models/                           GGUF language models (+ mmproj)
+  ComfyUI/                          pinned commit; custom_nodes: ComfyUI-GGUF, comfyui-krea2edit
+  venv/{app,imagegen,asr,ocr}/      Python environments (bin/python)
   tools/{hf-home,downloads,pip-cache,backup,rag}/
-  settings/api.json                 tüm kullanıcı ayarları (gizli anahtarlar 0600)
+  settings/api.json                 all user settings (secrets 0600)
   chats/  outputs/{images,videos,documents,charts,refs,thumbs,input}/
   logs/                             llama-server-*.std{out,err}.log, comfyui.*.log, audit.jsonl
-  mamidlabs-launch                  başlatıcı (.app paketinin çağırdığı betik)
+  mamidlabs-launch                  launcher (the script the .app bundle calls)
 ```
 
-Kurulum ayrıca **`~/Applications/MamidLabs.app`** paketini oluşturur
+The installer also creates the **`~/Applications/MamidLabs.app`** bundle
 (`Contents/Info.plist`, `Contents/MacOS/MamidLabs`, `Contents/Resources/mamidlabs.icns`).
 
-Windows'ta olduğu gibi **gömülü bir çalışma zamanı yok** (`runtime/` yoktur):
-uygulama sistem Python'u ile çalışır.
+As on Windows there is **no embedded runtime** (there is no `runtime/`): the application runs
+with the system Python.
 
-## 4. Başlatma zinciri
+## 4. Startup chain
 
-1. `MamidLabs.app` → `Contents/MacOS/MamidLabs` (kurulumda `@ROOT@` ile üretilir).
-2. Bu betik `~/Library/Application Support/mamidlabs/mamidlabs-launch` betiğini çalıştırır.
-3. Başlatıcı: `MAMIDLABS_ROOT` ayarlar, `venv/app/bin/python -m mamidlabs` çalıştırır.
-4. `mamidlabs/__main__.py` argümanları ayrıştırır; alt komut yoksa `ui/app.py:main`.
+1. `MamidLabs.app` → `Contents/MacOS/MamidLabs` (generated with `@ROOT@` at install time).
+2. This script runs the `~/Library/Application Support/mamidlabs/mamidlabs-launch` script.
+3. Launcher: sets `MAMIDLABS_ROOT` and runs `venv/app/bin/python -m mamidlabs`.
+4. `mamidlabs/__main__.py` parses the arguments; without a subcommand it calls `ui/app.py:main`.
 5. `ui/app.py`: `Paths`, `Settings`, `QApplication`, `MainWindow`.
-6. `MainWindow` yolları hazırlar, `ModelManager`/`ToolRegistry`/`InferenceEngine` kurar.
-7. Kullanıcı profili seçip **Modeli başlat**'a basınca `ManageWorker` → `ModelManager.start`.
-8. Uygulama kapanınca sunucu ve boştaki ComfyUI kapatılır (bellek boşalır).
+6. `MainWindow` prepares the paths and sets up `ModelManager`/`ToolRegistry`/`InferenceEngine`.
+7. When the user picks a profile and presses **Start model**, `ManageWorker` → `ModelManager.start`.
+8. When the application closes, the server and the idle ComfyUI are shut down (memory is freed).
 
-## 5. Süreçler ve portlar
+## 5. Processes and ports
 
-| Süreç | Port | Sahibi |
+| Process | Port | Owner |
 |---|---|---|
 | `llama-server` | 8080 | `core/manage.py` (`ModelManager`) |
-| ComfyUI | 8188 | medya köprüsü / `manage-mamidlabs.sh comfy` |
-| Ses döküm işçisi | rastgele (127.0.0.1) | `core/inference.py` |
+| ComfyUI | 8188 | media bridge / `manage-mamidlabs.sh comfy` |
+| Transcription worker | random (127.0.0.1) | `core/inference.py` |
 
-**Profiller** (`core/profiles.py`; takma adlar Windows'la aynı):
+**Profiles** (`core/profiles.py`; aliases are the same as on Windows):
 
-| Profil | Alias | Önemli bayraklar |
+| Profile | Alias | Important flags |
 |---|---|---|
-| MAX | `qwen3.8-27b-max` | ctx 32768, predict 8192, gpu-layers 99, q4_0 KV, cache-reuse 256, batch 512/256, threads 6/12, `--mmproj --no-mmproj-offload --image-min-tokens 1024`, `--reasoning-effort xhigh`, MTP varsa `--spec-type draft-mtp` |
-| FLASH | `qwen3.8-27b-flash` | aynı dosyalar; `--reasoning-effort low` |
-| LITE | `qwen3.5-9b-lite` | ctx `liteContext` (32768), predict 8192, batch 256/128, threads 4/8, `--image-min-tokens 512`, `--reasoning-effort low`, MTP varsa `--spec-type draft-mtp` |
+| MAX | `qwen3.8-27b-max` | ctx 32768, predict 8192, gpu-layers 99, q4_0 KV, cache-reuse 256, batch 512/256, threads 6/12, `--mmproj --no-mmproj-offload --image-min-tokens 1024`, `--reasoning-effort xhigh`, `--spec-type draft-mtp` when MTP is present |
+| FLASH | `qwen3.8-27b-flash` | the same files; `--reasoning-effort low` |
+| LITE | `qwen3.5-9b-lite` | ctx `liteContext` (32768), predict 8192, batch 256/128, threads 4/8, `--image-min-tokens 512`, `--reasoning-effort low`, `--spec-type draft-mtp` when MTP is present |
 
-Sunucu argümanları Windows sürümüyle **birebir aynıdır**; macOS'ta Metal zaten
-varsayılan arka uçtur, ayrı bir bayrak gerekmez (`--gpu-layers 99` Metal'e de
-uygulanır). MAX ve FLASH aynı dosyaları kullanır → arayüzde tek "Qwen3.8 MAX"
-girdisi (`catalog_for_display`). Kimliğe göre arama tam kataloğu (`get_profile`)
-kullanır.
+The server arguments are **exactly the same** as in the Windows edition; on macOS Metal is
+already the default backend, so no separate flag is needed (`--gpu-layers 99` applies to Metal
+too). MAX and FLASH use the same files → a single "Qwen3.8 MAX" entry in the interface
+(`catalog_for_display`). Lookup by id uses the full catalog (`get_profile`).
 
-**MTP.** `--spec-type draft-mtp` yalnızca GGUF gerçekten MTP/`nextn` katmanı
-taşıyorsa eklenir (`manage.gguf_has_mtp`); taşımayan modele verilirse llama.cpp
-açılmaz. LITE'ın 9B GGUF'u başlığı dönüşümde kaybeder, indirmede `mtp_inject.py`
-ile geri eklenir. `settings.mtp=false` ile kapatılır.
+**MTP.** `--spec-type draft-mtp` is only added when the GGUF actually carries MTP/`nextn`
+layers (`manage.gguf_has_mtp`); given to a model without them, llama.cpp will not start.
+LITE's 9B GGUF loses the header during conversion and it is added back with `mtp_inject.py`
+during the download. Disable it with `settings.mtp=false`.
 
-**Otomatik çaba (MAX/FLASH).** MAX ve FLASH aynı modeldir; tek fark sunucudaki
-`--reasoning-effort` değeridir. Profil değiştirmek modeli yeniden yüklediği
-(~15 sn) için varsayılan olarak (Profiller → **"Otomatik çaba (soruya göre)"**)
-çaba **istek başına** `chat_template_kwargs.reasoning_effort` ile verilir:
-kısa soru/selamlama → `low`, orta → `medium`, çok adımlı matematik/kod/analiz/
-karşılaştırma → `xhigh` (`inference.auto_reasoning_effort`). Seçim **tur başında
-bir kez** yapılır ve tur boyunca sabit kalır (sistem öneki değişmesin; KV
-önbelleği bozulmasın). Kapatılırsa sunucunun profil değeri kullanılır
-(`api.json → autoEffort=false`). LITE'ın şablonu bu anahtarı yok sayar; API
-sağlayıcılarına gönderilmez.
+**Auto effort (MAX/FLASH).** MAX and FLASH are the same model; the only difference is the
+server's `--reasoning-effort` value. Because changing profile reloads the model (~15 s), by
+default the effort is given **per request** (Profiles → **"Auto effort (by question)"**)
+through `chat_template_kwargs.reasoning_effort`: a short question/greeting → `low`, medium →
+`medium`, multi-step maths/code/analysis/comparison → `xhigh`
+(`inference.auto_reasoning_effort`). The choice is made **once at the start of the turn** and
+stays fixed for the whole turn (so the system prefix does not change and the KV cache is not
+broken). When off, the server's profile value is used (`api.json → autoEffort=false`). LITE's
+template ignores this key; it is not sent to API providers.
 
-**İndirme ve doğrulama.** `hf-hub.py` boyutu `bytes` ile doğrular, eksik dosyayı
-`hf_hub_download` ile **kaldığı yerden sürer** ve indirme bitince **SHA256**
-doğrular: katalogda sabit `sha256` varsa onu, yoksa Hugging Face LFS
-metadata'sındaki `lfs.sha256` özetini kullanır (repo/revision başına önbellek).
-Özet uyuşmazsa bozuk dosya **silinir**; doğrulama MTP enjeksiyonundan **önce**
-yapılır çünkü enjeksiyon dosyayı değiştirir. `HF_HOME` kökün altındadır.
+**Download and verification.** `hf-hub.py` verifies the size with `bytes`, **resumes** the
+missing file with `hf_hub_download`, and verifies **SHA256** once the download finishes: the
+pinned `sha256` from the catalog when present, otherwise the `lfs.sha256` digest in the
+Hugging Face LFS metadata (cached per repo/revision). If the digest does not match, the
+corrupt file is **deleted**; verification happens **before** MTP injection because the
+injection changes the file. `HF_HOME` is under the root.
 
-**Bellek kapısı** (`manage.ModelManager`): gereken = model dosyası + pay.
-MAX/FLASH pay **750 MiB**, tolerans **0** (kullanılabilir < gereken → hata).
-LITE pay **300 MiB**, tolerans **1024 MiB** (uyarı bandı
-`[gereken-1024, gereken)`). Görsel projektör üç profilde de CPU'da
-(`--no-mmproj-offload`), bütçeye girmez.
+**Memory gate** (`manage.ModelManager`): needed = model file + headroom. MAX/FLASH headroom
+**750 MiB**, tolerance **0** (available < needed → error). LITE headroom **300 MiB**,
+tolerance **1024 MiB** (warning band `[needed-1024, needed)`). The vision projector is on the
+CPU in all three profiles (`--no-mmproj-offload`) and does not count against the budget.
 
-macOS'ta **ayrı VRAM yoktur**: `available_memory_mib()` birleşik bellekten geri
-kazanılabilir miktarı döndürür (`vm_stat`: free + inactive + speculative +
-purgeable; `hw.pagesize` ile çarpılır). `MAMIDLABS_FREE_MEM_MIB` ortam değişkeni
-ölçümü geçersiz kılar (testler ve elle ayar için). macOS dışı ana makinelerde
-(`sys.platform != "darwin"`) sırasıyla `nvidia-smi` ve `/proc/meminfo` denenir.
-`macos_total_mib()` toplam birleşik belleği verir (yalnızca bilgi amaçlı).
-Model yüklenmeden önce artık GPU işçileri (`stop_orphan_workers`) kapatılır.
+macOS has **no separate VRAM**: `available_memory_mib()` returns the reclaimable amount from
+unified memory (`vm_stat`: free + inactive + speculative + purgeable; multiplied by
+`hw.pagesize`). The `MAMIDLABS_FREE_MEM_MIB` environment variable overrides the measurement
+(for tests and manual tuning). On non-macOS hosts (`sys.platform != "darwin"`) `nvidia-smi`
+and `/proc/meminfo` are tried in that order. `macos_total_mib()` returns the total unified
+memory (information only). Before the model loads, leftover GPU workers
+(`stop_orphan_workers`) are closed.
 
-**ComfyUI yaşam döngüsü:** varsayılan **yalnızca medya üretiminde** çalışır
-(`comfyKeepAlive=false`); dil modeli yüklenmeden önce kapatılır. LITE'ta
-`comfyKeepAlive=true` ile açık tutulabilir. Kaçak/mükerrer örnekler süreç
-**köklerine** göre sayılır (ComfyUI bir süreç çiftidir); `:8188`'i dinleyen tek
-örnek korunur.
+**ComfyUI lifecycle:** by default it runs **only during media generation**
+(`comfyKeepAlive=false`); it is closed before the language model loads. On LITE it can be kept
+open with `comfyKeepAlive=true`. Leaked/duplicate instances are counted by process **roots**
+(ComfyUI is a process pair); the single instance listening on `:8188` is kept.
 
-## 6. Sohbet isteğinin akışı
+## 6. Chat request flow
 
-1. Kullanıcı gönderir → `MainWindow._send` → `TurnWorker` (`QThread`).
-2. `InferenceEngine.build_job_messages`: sabit `SYSTEM_PROMPT` + geçmiş. Eski
-   turlardaki görsel verisi atılır, yerine not konur. Tura özel ipuçları sistem
-   istemine değil, **son kullanıcı mesajının başına** eklenir (KV önbellek öneki
-   bozulmasın).
-3. `run_turn` olaylar üretir (`event` sinyali ile arayüze): `thinking`, `answer`,
-   `status`, `tool`, `denied`, `error`, `done`, `cancelled`.
-4. **Araçlar** (`core/tools.py`): `search_web`, `fetch_page`, `read_document`,
-   `read_images_ocr`, `create_document`, `generate_image`, `generate_video`,
-   `generate_chart`, `find_reference_image`, `ask_model`, `list_bound_files`,
-   `read_bound_file`, `search_folder`, `write_bound_file`, `run_command`. Araçlar
-   niyete ve çiplere göre sunulur; üretim araçları çağrı anında yeniden denetlenir.
-5. **Onay:** yazma/çalıştırma araçları `approve` geri çağrısıyla sorulur
-   (`TurnWorker._approve` → `approval_needed` sinyali → `QMessageBox`). 10 dk
-   zaman aşımı → red. "Tam erişim" çipi açıksa normalde sorulmaz; **ancak o turda
-   güvenilmeyen içerik** (`search_web`, `fetch_page`, `read_document`,
-   `read_images_ocr`, `read_bound_file`, `search_folder`) **okunduysa
-   `run_command` ve `write_bound_file` için yine sorulur** (`approval_required`);
-   onay penceresi nedeni de yazar (`chat.approval_untrusted`). Güvenilmeyen
-   içeriğin sonucu modele `chat.untrusted_prefix` etiketiyle verilir ve sistem
-   istemi (`prompt.untrusted`) bu içeriğin **talimat değil veri** olduğunu söyler
-   (istem enjeksiyonuna karşı).
-6. **`done` olayı** o turda eklenen `assistant.tool_calls` ve `tool` mesajlarını
-   `data` alanında taşır; arayüz bunları kalıcı geçmişe ekler. Bu yapılmazsa
-   sonraki turda istemci öneki sunucununkinden farklı olur ve bağlam baştan
-   işlenir.
-7. **Bağlam koruması** (Windows paritesi): tur başında tahmini istem +
-   `max_tokens` + pay bağlamı aşacaksa `compact_turn_messages` **iki geçişle**
-   kısaltır — önce en eski araç çıktılarının yalnızca başı, yetmezse en eski araç
-   çıktıları ve eski asistan metni kısa bir işaretle değiştirilir (mesaj silinmez;
-   `tool_calls`/`tool` eşleşmesi korunur). **Hâlâ sığmıyorsa** araçlar
-   **sunulmaz** ve modelden eldeki bulgularla görünür yanıt istenir
-   (`chat.context_full`); `max_tokens` kalan odaya göre kısılır. "Sıkıştırıldı"
-   durum notu yalnızca gerçekten bir şey kısaldıysa gösterilir.
+1. The user sends → `MainWindow._send` → `TurnWorker` (`QThread`).
+2. `InferenceEngine.build_job_messages`: fixed `SYSTEM_PROMPT` + history. Image data from old
+   turns is dropped and replaced with a note. Turn-specific hints are added **to the start of
+   the last user message**, not to the system prompt (so the KV cache prefix is not broken).
+3. `run_turn` produces events (to the interface through the `event` signal): `thinking`,
+   `answer`, `status`, `tool`, `denied`, `error`, `done`, `cancelled`.
+4. **Tools** (`core/tools.py`): `search_web`, `fetch_page`, `read_document`,
+   `read_images_ocr`, `create_document`, `generate_image`, `generate_video`, `generate_chart`,
+   `find_reference_image`, `ask_model`, `list_bound_files`, `read_bound_file`, `search_folder`,
+   `write_bound_file`, `run_command`. Tools are offered according to intent and chips;
+   production tools are re-checked at call time.
+5. **Approval:** write/execute tools are asked through the `approve` callback
+   (`TurnWorker._approve` → `approval_needed` signal → `QMessageBox`). A 10 min timeout →
+   denied. When the "Full access" chip is on they are normally not asked; **however, if
+   untrusted content** (`search_web`, `fetch_page`, `read_document`, `read_images_ocr`,
+   `read_bound_file`, `search_folder`) **was read in that turn, `run_command` and
+   `write_bound_file` still ask** (`approval_required`); the approval dialog also states the
+   reason (`chat.approval_untrusted`). The result of untrusted content is given to the model
+   with the `chat.untrusted_prefix` label, and the system prompt (`prompt.untrusted`) says this
+   content is **data, not instructions** (defence against prompt injection).
+6. **The `done` event** carries the `assistant.tool_calls` and `tool` messages added in that
+   turn in its `data` field; the interface appends them to the persistent history. Otherwise
+   in the next turn the client prefix differs from the server's and the context is processed
+   from scratch.
+7. **Context protection** (Windows parity): if at the start of a turn the estimated prompt +
+   `max_tokens` + headroom would exceed the context, `compact_turn_messages` shortens with
+   **two passes** — first only the head of the oldest tool outputs, and if that is not enough
+   the oldest tool outputs and old assistant text are replaced with a short marker (messages
+   are not deleted; the `tool_calls`/`tool` pairing is preserved). **If it still does not
+   fit**, tools are **not offered** and the model is asked for a visible answer from the
+   findings present (`chat.context_full`); `max_tokens` is reduced to the remaining room. The
+   "compacted" status note is only shown when something was actually shortened.
 
-### Web başarısızlığı dürüstlüğü
+### Web failure honesty
 
-Karar **web denendi VE hiç başarılı çağrı olmadı** koşuluna bağlıdır
-(`WebTracker.unavailable = fail_count > 0 and not success`). Kısmi başarı
-(ör. 7 çağrının 4'ü başarılı) başarısızlık **sayılmaz**. ≥2 hatada web araçları
-kilitlenir (`should_lock_tools = fail_count >= 2 and not success`).
-`add_failure_note` başarı varsa erken döner. Güncel bilgi isteyen turda web yoksa
-modelin metni kullanılmaz, dürüst mesaj gösterilir; uydurma atıflar
-(`strip_fabricated_citations`) ayıklanır.
+The decision depends on **web was attempted AND there was no successful call**
+(`WebTracker.unavailable = fail_count > 0 and not success`). Partial success (e.g. 4 of 7
+calls succeed) does **not** count as failure. After ≥2 failures the web tools lock
+(`should_lock_tools = fail_count >= 2 and not success`). `add_failure_note` returns early when
+there is a success. On a turn that asks for current information without the web, the model's
+text is not used; an honest message is shown, and fabricated citations
+(`strip_fabricated_citations`) are stripped.
 
-## 7. Görsel, fotoğraf düzenleme ve video
+## 7. Image, photo editing and video
 
-- Model `generate_image` çağırınca `MediaBridge` (arayüzün sağladığı köprü)
-  ComfyUI'yi sürer. Dil modeli yalnızca istemi yazar.
-- **Modlar** (`generate_image.mode`): `yeni` (metinden), `yeniden_uret` /
-  `stil_referansi` (eklenen görselden), `kimlik_duzenle` (Krea 2 Identity Edit
-  LoRA; **yalnızca MAX/FLASH** — LITE'ta bellek yetmediği için sunulmaz).
-- Video: Wan 2.2 TI2V 5B; modlar `metin`, `gorsel`, `video`.
-- Harici model dosyaları kopyalanmadan kullanılır: ComfyUI
-  `--extra-model-paths-config`.
-- macOS'ta ComfyUI **MPS** ile çalışır; CUDA'ya göre belirgin yavaştır ve bazı
-  özel düğümler yalnızca CPU'da çalışabilir. `imagegen` ortamındaki torch PyPI
-  tekerleğidir (MPS dahili); ayrı bir CUDA index'i **kullanılmaz**.
-- API medya: görsel/video sağlayıcısı API ise `api-media.py`.
+- When the model calls `generate_image`, `MediaBridge` (the bridge supplied by the interface)
+  drives ComfyUI. The language model only writes the prompt.
+- **Modes** (`generate_image.mode`): `yeni` (from text), `yeniden_uret` / `stil_referansi`
+  (from an attached image), `kimlik_duzenle` (Krea 2 Identity Edit LoRA; **MAX/FLASH only** —
+  not offered on LITE because there is not enough memory).
+- Video: Wan 2.2 TI2V 5B; modes `metin`, `gorsel`, `video`.
+- External model files are used without copying: ComfyUI `--extra-model-paths-config`.
+- On macOS ComfyUI runs with **MPS**; it is noticeably slower than CUDA and some custom nodes
+  can only run on the CPU. The torch in the `imagegen` environment is the PyPI wheel (MPS
+  built in); a separate CUDA index is **not used**.
+- API media: when the image/video provider is an API, `api-media.py` is used.
 
-## 8. API sağlayıcıları
+## 8. API providers
 
-- Tek tablo: `core/providers.py`: `openai`, `claude`, `gemini`, `deepseek`,
-  `custom`. Yeni sağlayıcı = tabloya bir satır (+ gerekirse dönüştürücü).
-- **`custom`** ("Özel (OpenAI uyumlu)"): Ollama, LM Studio, vLLM vb. Taban adres
-  ayarlardan okunur; **anahtar isteğe bağlıdır** (boşsa `Authorization` gitmez).
-- **Claude:** `thinking` gönderilmez; `tool_choice` yalnızca gövdede varsa `auto`;
-  `max_tokens` alt sınırı 16000; araç döngüsünde imzalı `thinking` blokları
-  `ClaudeStream` ile toplanıp ilk `tool_use` kimliği üzerinden geri gönderilir.
-- **DeepSeek** görsel kabul etmez; `image_url` parçaları metin notuna indirilir.
-- Anahtarlar tercihen **macOS oturum anahtarlığında** (`keyring` / Keychain),
-  yoksa `settings/api.json` içinde `0600` izinle. `Settings.secret_backend`
-  hangisinin kullanıldığını bildirir.
+- A single table: `core/providers.py`: `openai`, `claude`, `gemini`, `deepseek`, `custom`. A
+  new provider = one row in the table (+ a converter if needed).
+- **`custom`** ("Custom (OpenAI-compatible)"): Ollama, LM Studio, vLLM etc. The base URL is
+  read from settings; **the key is optional** (no `Authorization` when empty).
+- **Claude:** `thinking` is not sent; `tool_choice` is `auto` only when present in the body;
+  the `max_tokens` floor is 16000; in the tool loop the signed `thinking` blocks are collected
+  by `ClaudeStream` and sent back through the first `tool_use` id.
+- **DeepSeek** does not accept images; `image_url` parts are flattened into a text note.
+- Keys are stored preferably in the **macOS login keychain** (`keyring` / Keychain), otherwise
+  in `settings/api.json` with `0600` permissions. `Settings.secret_backend` reports which is
+  used.
 
-## 9. Profiller, katalog ve indirme
+## 9. Profiles, catalog and download
 
-- `core/profiles.py`: her profil için dosya listesi (`target` köke göreli, `repo`,
-  `revision`, `filename`, `bytes`, isteğe bağlı `sha256`).
-- İndirme boyutları: LITE ~36 GB, MAX/FLASH ~52 GB. `hf-hub.py` boyutu `bytes` ile
-  doğrular, eksik dosyayı kaldığı yerden sürer (`hf_hub_download`) ve indirme
-  bitince **SHA256** doğrular: katalogda sabit `sha256` varsa onu, yoksa Hugging
-  Face LFS metadata'sındaki `lfs.sha256` özetini kullanır (repo/revision başına
-  önbelleklenir). Uyuşmazsa bozuk dosya **silinir** ve hata verilir. `HF_HOME`
-  kökün altındadır.
-- Profil durumu yalnızca dosyanın **varlığına** bakar, boyut karşılaştırmaz.
-- **Profil silme:** yalnızca o profile **özel** dosyalar silinir
-  (`unique_targets`); paylaşılanlar korunur. MAX ve FLASH aynı küme olduğundan
-  takma ad sayılır.
+- `core/profiles.py`: the file list per profile (`target` relative to the root, `repo`,
+  `revision`, `filename`, `bytes`, optional `sha256`).
+- Download sizes: LITE ~36 GB, MAX/FLASH ~52 GB. `hf-hub.py` verifies the size with `bytes`,
+  resumes the missing file where it stopped (`hf_hub_download`), and verifies **SHA256** once
+  the download finishes: the pinned `sha256` from the catalog when present, otherwise the
+  `lfs.sha256` digest in the Hugging Face LFS metadata (cached per repo/revision). On a
+  mismatch the corrupt file is **deleted** and an error is raised. `HF_HOME` is under the root.
+- Profile status looks only at the **existence** of the file, it does not compare sizes.
+- **Profile deletion:** only files **specific** to that profile are deleted (`unique_targets`);
+  shared ones are kept. Since MAX and FLASH are the same set, they count as one alias.
 
-## 10. Kurulum, güncelleme ve kaldırma
+## 10. Install, update and uninstall
 
-- `install-mamidlabs.sh [--root] [--profile] [--language tr|en] [--stage a,b]
+- `install-mamidlabs.sh [--root] [--profile] [--language en|tr] [--stage a,b]
   [--skip-media] [--skip-audio] [--skip-ocr] [--skip-models] [--no-desktop]
-  [--no-cuda] [--force]`. Aşamalar: `preflight`, `layout`, `llama`, `python`,
-  `comfyui`, `models`, `verify`. `--language` seçimi `settings/api.json`'a yazar;
-  aşama döngüsü ilerlemeyi `logs/kurulum-adim.txt` (satır 1/2/3: adım no, toplam,
-  ad), sonunda özeti `logs/kurulum-ozeti.txt` yazar (sihirbaz bunları okur).
-- **Sihirbaz ve DMG:** `packaging/macos/build-dmg.sh` içinde **MamidLabs
-  Kurulum.app** bulunan bir `.dmg` üretir (`hdiutil`, `-format UDZO`); uygulama
-  paketi `Contents/Resources/mamidlabs-src` altına gömülü Python kaynaklarını
-  taşır ve `python3 -m mamidlabs.wizard` çalıştırır. Kaynaktan `./scripts/mamidlabs-setup.sh`
-  de aynı sihirbazı açar.
-- Betik **macOS'un bash 3.2'si** ile uyumludur (ilişkisel dizi, `mapfile`,
-  `${var,,}` **kullanılmaz**); shebang `#!/bin/bash`.
-- `layout` program dosyalarını, başlatıcıyı ve `~/Applications/MamidLabs.app`
-  paketini kurar; `.icns` ikonu `sips`/`iconutil` ile PNG'den üretilir (yoksa
-  ikonsuz kurulur).
-- `llama` aşaması mimariye göre `llama-<build>-bin-macos-arm64.zip` ya da
-  `-macos-x64.zip` indirir ve `llama-server` + `*.dylib` çıkarır (Metal).
-- `python` aşaması torch'u **PyPI'dan** (MPS dahili) kurar: imagegen için
-  `torch torchvision torchaudio`, asr için `torch torchaudio`, ocr için
-  `paddlepaddle` (CPU). CUDA index'i kullanılmaz.
-- Sabit sürümler: llama.cpp `b10998`, ComfyUI `b0f4b7b`, ComfyUI-GGUF `6ea2651`,
+  [--no-cuda] [--force]`. Stages: `preflight`, `layout`, `llama`, `python`, `comfyui`,
+  `models`, `verify`. `--language` writes the choice into `settings/api.json`; the stage loop
+  writes progress into `logs/kurulum-adim.txt` (lines 1/2/3: step number, total, name) and the
+  summary into `logs/kurulum-ozeti.txt` at the end (the wizard reads these).
+- **Wizard and DMG:** `packaging/macos/build-dmg.sh` produces a `.dmg` containing
+  **MamidLabs Setup.app** (`hdiutil`, `-format UDZO`); the app bundle carries the embedded
+  Python sources under `Contents/Resources/mamidlabs-src` and runs
+  `python3 -m mamidlabs.wizard`. From source, `./scripts/mamidlabs-setup.sh` opens the same
+  wizard.
+- The script is compatible with **macOS bash 3.2** (no associative arrays, no `mapfile`, no
+  `${var,,}`); the shebang is `#!/bin/bash`.
+- `layout` installs the program files, the launcher and the `~/Applications/MamidLabs.app`
+  bundle; the `.icns` icon is generated from PNG with `sips`/`iconutil` (installed without an
+  icon if missing).
+- The `llama` stage downloads `llama-<build>-bin-macos-arm64.zip` or `-macos-x64.zip`
+  depending on the architecture and extracts `llama-server` + `*.dylib` (Metal).
+- The `python` stage installs torch **from PyPI** (MPS built in): `torch torchvision
+  torchaudio` for imagegen, `torch torchaudio` for asr, `paddlepaddle` (CPU) for ocr. No CUDA
+  index is used.
+- Pinned versions: llama.cpp `b10998`, ComfyUI `b0f4b7b`, ComfyUI-GGUF `6ea2651`,
   comfyui-krea2edit `86f886d`.
-- **Kaldırma:** `uninstall-mamidlabs.sh [--keep-user-data] [--dry-run] [--yes]`.
-  Yalnızca köke ve `~/Applications/MamidLabs.app` paketine dokunur;
-  sistem/kullanıcı klasörlerinde çalışmayı reddeder.
-- **Güncelleme:** uygulamayı kapat → `git pull` → `install-mamidlabs.sh --stage layout`.
-- **Sürüm ve yayım:** sürümün tek kaynağı `mamidlabs/__init__.py:__version__` ve
-  `pyproject.toml:version` (eşit olmalı). Yeni sürüm: ikisini artır, `CHANGELOG.md`'ye
-  bölüm ekle, `v<sürüm>` etiketini it. Etiket itilince
-  `.github/workflows/kurulum-paketi.yml` `.dmg`'yi derler ve **sabit adla**
-  (`MamidLabs.dmg`) GitHub Release'e yükler; `releases/latest/download/MamidLabs.dmg`
-  böylece her zaman en son sürümü indirir.
+- **Uninstall:** `uninstall-mamidlabs.sh [--keep-user-data] [--dry-run] [--yes]`. It only
+  touches the root and the `~/Applications/MamidLabs.app` bundle; it refuses to run on
+  system/user folders.
+- **Update:** close the app → `git pull` → `install-mamidlabs.sh --stage layout`.
+- **Version and release:** the single source of the version is
+  `mamidlabs/__init__.py:__version__` and `pyproject.toml:version` (must be equal). New
+  release: bump both, add a section to `CHANGELOG.md`, push the `v<version>` tag. When the tag
+  is pushed, `.github/workflows/installer.yml` builds the `.dmg` and uploads it to the GitHub
+  Release under a **fixed name** (`MamidLabs.dmg`); `releases/latest/download/MamidLabs.dmg`
+  therefore always downloads the latest version.
 
-## 11. Ayarlar ve kullanıcı verisi
+## 11. Settings and user data
 
-`settings/api.json` (uygulama bellekte tutar, değişince ve çıkışta yazar;
-**uygulama açıkken elle düzenleme ezilir**):
+`settings/api.json` (the application keeps it in memory; it writes on change and on exit;
+**editing it by hand while the app is open is overwritten**):
 
-- Model seçimi: `selected`, `selectedModel`, `selectedLocalModel`, `localProfile`.
-- Sağlayıcılar: `providers.<id>.{key, model, models, contextLimit, baseUrl}`.
-- Kendi modellerin: `localModels`, `imageLocalModel`, `videoLocalModel`,
-  `imageProvider`, `videoProvider`, `externalMediaModels`.
-- Arayüz: `uiPreferences.{internet, agent, accessMode}`, `firstRunApiSettings`.
+- Model selection: `selected`, `selectedModel`, `selectedLocalModel`, `localProfile`.
+- Providers: `providers.<id>.{key, model, models, contextLimit, baseUrl}`.
+- Your own models: `localModels`, `imageLocalModel`, `videoLocalModel`, `imageProvider`,
+  `videoProvider`, `externalMediaModels`.
+- Interface: `uiPreferences.{internet, agent, accessMode}`, `firstRunApiSettings`.
 - LITE: `liteModel`, `liteContext`.
-- Medya: `comfyKeepAlive` (varsayılan `false`).
-- Ses: `audioEvents` (varsayılan `true`).
-- Diğer: `mtp` (varsayılan `true`), `autoEffort` (varsayılan `true`), `boundFolder`.
-- Gizli anahtarlar: macOS Keychain ya da bu dosyada (`0600`).
+- Media: `comfyKeepAlive` (default `false`).
+- Audio: `audioEvents` (default `true`).
+- Other: `mtp` (default `true`), `autoEffort` (default `true`), `boundFolder`.
+- Secrets: the macOS Keychain or this file (`0600`).
 
-Sohbetler `chats/` altında saklanır. `logs/audit.jsonl`: araç çağrıları kaydı
-(içerik değil; yol/komut kimliği).
+Chats are stored under `chats/`. `logs/audit.jsonl`: a record of tool calls (not content;
+path/command id).
 
-## 12. Testler
+## 12. Tests
 
 ```bash
 python3 -m pip install pytest -r requirements/app.txt
-python3 -m pytest -q          # 211 test; PySide6 gerektirmez (yalnızca sihirbaz penceresi testleri)
+python3 -m pytest -q          # 203 tests; PySide6 not required (only the wizard window tests)
 ./scripts/smoke-test.sh --profile flash
 ```
 
-- `conftest.py` `MAMIDLABS_ROOT`'u geçici bir köke yönlendirir; testler
-  `__file__`'dan bağımsız çalışır. Aynı dosyadaki autouse fikstür, süreç-global
-  dil durumunu (`i18n`) her testten önce/sonra Türkçe'ye sıfırlar.
-- Yeni davranış testleri: `test_model_download_integrity.py` (`sha256_file`,
-  `lookup_sha256`/`verify_sha256`, `incomplete_bytes`, `_mtp_config`, fetch
-  koruması), `test_auto_effort.py` (`auto_reasoning_effort` skoru + istek gövdesine
-  `chat_template_kwargs`), `test_prompt_injection.py` (güvenilmeyen içerik etiketi,
-  sistem istemi, tam erişimde bile onay), `test_rag_tools.py` (`rag-tools.py` BM25
-  + `search_folder` kapısı).
-- `tests/test_wizard.py` saf yardımcıları Qt olmadan sınar;
-  `tests/test_wizard_gui.py` sihirbaz penceresini başsız açmayı dener ve Qt
-  yüklenemezse (ör. sistem kütüphanesi eksik) atlanır.
-- Testler PySide6'yı **içe aktarmaz**; çekirdek mantık saf Python'dur. GUI
-  yalnızca gerçek bir masaüstünde (smoke testinin arayüz adımlarında) çalışır.
-- `test_paths.py` platforma duyarlıdır: macOS'ta `default_root()` Library
-  yolunu döner ve XDG testi atlanır.
-- `manage.FileLock` POSIX'te (`macOS`/Linux) `fcntl`, Windows'ta `msvcrt` kullanır.
-- **Bellek testleri:** `MAMIDLABS_FREE_MEM_MIB` ölçümü geçersiz kılar;
-  `_macos_available_mib` `vm_stat` çıktısını ayrıştırır (sahte `subprocess.run`
-  ile test edilir).
-- **Smoke testi adımları:** `doctor`, `sunucu_baslat`, `saglik`, `sohbet`,
-  `grafik`, `cevrimdisi`, `mtp`, `ocr`, `gorsel`, `video`, `sunucu_durdur`.
-  Sonuç `logs/smoke-test-son.json`'a yazılır.
-- **CI:** her push/PR'da `tests.yml` (macos-latest, Python 3.12).
+- `conftest.py` points `MAMIDLABS_ROOT` at a temporary root, so the tests run independently of
+  `__file__`. The autouse fixture in the same file resets the process-global language state
+  (`i18n`) to the default (English) before and after every test.
+- Tests for new behaviour: `test_model_download_integrity.py` (`sha256_file`,
+  `lookup_sha256`/`verify_sha256`, `incomplete_bytes`, `_mtp_config`, fetch protection),
+  `test_auto_effort.py` (`auto_reasoning_effort` score + `chat_template_kwargs` in the request
+  body), `test_prompt_injection.py` (untrusted content label, system prompt, approval even
+  under full access), `test_rag_tools.py` (`rag-tools.py` BM25 + the `search_folder` gate).
+- `tests/test_wizard.py` tests the pure helpers without Qt; `tests/test_wizard_gui.py` tries to
+  open the wizard window headlessly and is skipped when Qt cannot be loaded (e.g. a missing
+  system library).
+- The tests do **not import** PySide6; the core logic is pure Python. The GUI only runs on a
+  real desktop (in the interface steps of the smoke test).
+- `test_paths.py` is platform-sensitive: on macOS `default_root()` returns the Library path
+  and the XDG test is skipped.
+- `manage.FileLock` uses `fcntl` on POSIX (`macOS`/Linux) and `msvcrt` on Windows.
+- **Memory tests:** `MAMIDLABS_FREE_MEM_MIB` overrides the measurement;
+  `_macos_available_mib` parses the `vm_stat` output (tested with a fake `subprocess.run`).
+- **Smoke test steps:** `doctor`, `server_start`, `health`, `chat`, `chart`, `offline`, `mtp`,
+  `ocr`, `image`, `video`, `server_stop`. The result is written to
+  `logs/smoke-test-son.json`.
+- **CI:** `tests.yml` on every push/PR (macos-latest, Python 3.12).
 
-## 13. Donanım gerçekleri
+## 13. Hardware facts
 
-macOS'ta hız **Metal**'e ve **birleşik bellek** miktarına bağlıdır. NVIDIA
-ölçümleri (Windows/Linux) referanstır; Apple Silicon'da sohbet token hızı
-benzerdir, görsel/video üretimi (MPS) ise CUDA'ya göre daha yavaştır.
+On macOS speed depends on **Metal** and on the amount of **unified memory**. The NVIDIA
+measurements (Windows/Linux) are a reference; on Apple Silicon the chat token rate is similar,
+while image/video generation (MPS) is slower than CUDA.
 
-| | 32 GB birleşik bellek (MAX/FLASH) | 16 GB birleşik bellek (LITE) |
+| | 32 GB unified memory (MAX/FLASH) | 16 GB unified memory (LITE) |
 |---|---|---|
-| Sohbet | Metal'de akıcı (MTP açık) | Metal'de akıcı (MTP açık) |
-| Görsel (`yeni`) | dakikalar mertebesi (MPS) | dakikalar mertebesi (MPS) |
-| Fotoğraf düzenleme | desteklenir | **desteklenmiyor** |
-| Ses dökümü | CPU (int8) | CPU (int8) |
+| Chat | smooth on Metal (MTP on) | smooth on Metal (MTP on) |
+| Image (`new`) | on the order of minutes (MPS) | on the order of minutes (MPS) |
+| Photo editing | supported | **not supported** |
+| Audio transcription | CPU (int8) | CPU (int8) |
 
-27B model GPU/GPU-benzeri bütçede ~15 GB yer kaplar (dosya ~14,6 GB; KV cache
-q4_0 + hesap tamponları + MTP draft bağlamı). Bu yüzden MAX/FLASH payı **750
-MiB**'dir: model ancak tam sığacaksa yüklenir ve tüm kullanılabilir belleği
-kullanır.
+The 27B model occupies ~15 GB of the GPU/GPU-like budget (the file is ~14.6 GB; plus the
+q4_0 KV cache + compute buffers + the MTP draft context). That is why the MAX/FLASH headroom
+is **750 MiB**: the model only loads if it fits **completely** and then uses **all available
+memory**.
 
-**`kimlik_duzenle` neden LITE'ta yok:** Krea2EditGroundedEncode metin/görsel
-kodlayıcıyı (~5 GB) ve difüzyon modelini (~7,5 GB) aynı grafikte tutar; toplam
-LITE bütçesini aşar. Bu yüzden LITE'ta mod hiç sunulmaz.
+**Why `kimlik_duzenle` is missing on LITE:** Krea2EditGroundedEncode keeps the text/image
+encoder (~5 GB) and the diffusion model (~7.5 GB) in the same graph, which exceeds the LITE
+budget. That is why the mode is not offered at all on LITE.
 
-**Ses dökümü:** macOS'ta CTranslate2'nin Metal arka ucu yoktur; hattın tamamı
-CPU'da (int8) çalışır. Bu yüzden dil-modeli swap'ı gerekmez ve `choose_plan`
-macOS'ta her zaman `('cpu', False)` döner.
+**Audio transcription:** on macOS CTranslate2 has no Metal backend; the whole pipeline runs on
+the CPU (int8). A language-model swap is therefore not needed and `choose_plan` always returns
+`('cpu', False)` on macOS.
 
-## 14. Kritik tuzaklar
+## 14. Critical pitfalls
 
-1. **Kurulum kökünü `__file__`'dan türetme.** Paket `site-packages` içinde
-   yaşar; işçiler kökü `MAMIDLABS_ROOT` → `~/Library/Application Support/mamidlabs`
-   ile okur (`workers/_root.py`). İşçiye yeni yol eklerken sabit yol yazma.
-2. **KV önbellek eşleşmesi.** Arayüzün sakladığı mesaj dizisi, sunucunun o turda
-   işlediğiyle bayt bayt aynı olmalı. Araç çağrısı/sonucu saklanmazsa ya da sistem
-   istemi tura göre değişirse bağlam her turda baştan işlenir. Tura özel metni son
-   kullanıcı mesajına koy.
-3. **Bellek payı profile göre** (MAX/FLASH 750 MiB tolerans 0; LITE 300 MiB tolerans
-   1024 MiB). macOS'ta ölçüm `vm_stat`'tan gelir; "Pages free" **tek başına
-   kullanılmaz** (macOS dosya önbelleğini bilerek büyük tutar) — geri kazanılabilir
-   sayfalar (free + inactive + speculative + purgeable) toplanır. Model
-   yüklenmeden önce boştaki ComfyUI **her zaman** kapatılır.
-4. **ComfyUI bir süreç çiftidir** (venv başlatıcı + base python çocuğu). Kaçak
-   kararı süreç **sayısıyla** değil **kökleriyle** verilir; tek sağlıklı örnek zaten
-   2 süreçtir.
-5. **`/proc` macOS'ta yoktur.** `manage._exe_for` Linux dışında boş döner (kök
-   eşleşmesi `ps -ww` ile gelen tam komut satırından yapılır); port dinleyicisi
-   Linux'ta `/proc`, macOS'ta `lsof` ile bulunur.
-6. **`fcntl` POSIX'e özgüdür.** macOS'ta vardır; `manage.FileLock` yine de tembel
-   içe aktarır ve Windows'ta `msvcrt`'ye düşer (testler Windows'ta da geçer).
-7. **`done.data` boş olabilir.** İşçi araç çağrısı yokken boş liste koyar; arayüz
-   `if data:` koruması kullanır (boş diziyi koşulsuz birleştirme).
-8. **Tek görsel kuralı.** Sohbete aynı anda yalnızca bir görsel gider (çoklu görsel
-   yalnızca OCR ile).
-9. **`settings/api.json`'u uygulama açıkken elle değiştirme;** çıkışta bellekteki
-   kopya yazılır.
-10. **`run_command` `/bin/zsh -lc` ile çalışır** (macOS varsayılan kabuğu) ve
-    kullanıcı onayı ister. Kabuk kaçışları Windows'taki `.cmd` tuzaklarından
-    farklıdır; komutu tek satır tut.
-11. **PySide6 yalnızca gerçek masaüstünde gerekir.** Çekirdek testler GUI'yi içe
-    aktarmaz; CI'da PySide6 kurulmadan da geçer.
-12. **Sürüm iki yerde:** `mamidlabs/__init__.py:__version__` ve
-    `pyproject.toml:version`. İkisini birlikte artır.
-13. **`.app` şablonları yer tutucu içerir;** `packaging/Info.plist` `@VERSION@`,
-    `packaging/MacOS-MamidLabs` `@ROOT@` içerir. Kurulum `sed` ile gerçek
-    değerlerle değiştirir. Doğrudan kopyalamayın.
-14. **macOS bash 3.2.** Betiklerde bash 4+ özelliği (ilişkisel dizi, `mapfile`,
-    `${var,,}`, `local -n`) **kullanma**; `realpath -m` de yoktur (yerine Python
-    ile `os.path.abspath` kullanılır).
-15. **CUDA index'i kullanma.** macOS torch tekerlekleri PyPI'da MPS dahili gelir;
-    `download.pytorch.org/whl/cu130` gibi index'ler macOS'ta çalışmaz.
-    `nvidia-cublas-cu12`/`nvidia-cudnn-cu12` macOS için yoktur, requirements/asr.txt'te
-    **bulunmaz**.
-16. **Sihirbaz Qt ve masaüstü ister.** `python3 -m mamidlabs.wizard` PySide6 yoksa
-    `wizard.error.no_pyside` ile **2** koduyla çıkar (`wizard/setup.py` bu yüzden
-    tembel içe aktarılır); macOS'ta `DISPLAY` denetimi yoktur. Sihirbazın saf
-    yardımcıları (`wizard/__init__.py`) Qt olmadan test edilir. Öneri **birleşik
-    belleğe** ve Apple Silicon'a bakar; Intel Mac'e yerel profil önerilmez.
-17. **macOS bash 3.2.** Sihirbaz/paketleme betikleri dahil tüm `scripts/*.sh`
-    `#!/bin/bash` kullanır ve bash 4+ özelliği içermez; `packaging/macos/build-dmg.sh`
-    yalnızca macOS'ta (`hdiutil`) çalışır, CI'da yalnızca `bash -n` ile denetlenir.
-18. **RAG indeksi güvenilmeyen içeriktir.** `search_folder` sonucu modele
-    `[GÜVENİLMEYEN İÇERİK…]` etiketiyle gider ve o turda yazma/çalıştırma onayı
-    tetikler. İndeks `tools/rag/bound-<hash>.json`'da tutulur; hash **gerçek yolun
-    aynısıyla** (küçük harfe çevrilmeden) alınır (Linux sürümüyle aynı; macOS
-    birimleri genelde büyük/küçük harfe duyarsızdır). `hf-hub.py` `HF_HOME`'u
-    **import'tan önce** ayarlar; SHA256 uyuşmazsa indirilen dosya silinir (sessiz
-    bozuk model bırakılmaz).
+1. **Never derive the install root from `__file__`.** The package lives inside
+   `site-packages`; workers read the root from `MAMIDLABS_ROOT` →
+   `~/Library/Application Support/mamidlabs` (`workers/_root.py`). When you add a new path to
+   a worker, do not hardcode it.
+2. **KV cache match.** The message array the interface stores must be byte-for-byte identical
+   to what the server processes in that turn. If a tool call/result is not stored, or the
+   system prompt changes per turn, the context is processed from scratch on every turn. Put
+   turn-specific text in the last user message.
+3. **Memory headroom depends on the profile** (MAX/FLASH 750 MiB tolerance 0; LITE 300 MiB
+   tolerance 1024 MiB). On macOS the measurement comes from `vm_stat`; "Pages free" is **not
+   used alone** (macOS deliberately keeps a large file cache) — the reclaimable pages (free +
+   inactive + speculative + purgeable) are summed. Before the model loads an idle ComfyUI is
+   **always** closed.
+4. **ComfyUI is a process pair** (venv launcher + base python child). A leak is decided by
+   process **roots**, not by process **count**; a single healthy instance is already 2
+   processes.
+5. **`/proc` does not exist on macOS.** `manage._exe_for` returns empty outside Linux (root
+   matching uses the full command line from `ps -ww`); the port listener is found via `/proc`
+   on Linux and via `lsof` on macOS.
+6. **`fcntl` is POSIX-specific.** It exists on macOS; `manage.FileLock` still imports it lazily
+   and falls back to `msvcrt` on Windows (the tests pass on Windows too).
+7. **`done.data` can be empty.** Without tool calls the worker puts an empty list; the
+   interface uses an `if data:` guard (do not merge an empty array unconditionally).
+8. **Single-image rule.** Only one image goes into a chat at a time (multiple images only via
+   OCR).
+9. **Do not edit `settings/api.json` by hand while the app is open;** on exit the in-memory
+   copy is written.
+10. **`run_command` runs with `/bin/zsh -lc`** (the macOS default shell) and asks for user
+    approval. Shell escaping differs from the `.cmd` pitfalls on Windows; keep the command on
+    a single line.
+11. **PySide6 is only needed on a real desktop.** The core tests do not import the GUI; CI
+    passes without PySide6 installed.
+12. **The version lives in two places:** `mamidlabs/__init__.py:__version__` and
+    `pyproject.toml:version`. Bump both together.
+13. **The `.app` templates contain placeholders;** `packaging/Info.plist` has `@VERSION@`,
+    `packaging/MacOS-MamidLabs` has `@ROOT@`. The installer replaces them with `sed`. Do not
+    copy them directly.
+14. **macOS bash 3.2.** Do **not** use bash 4+ features in scripts (associative arrays,
+    `mapfile`, `${var,,}`, `local -n`); `realpath -m` is missing too (use Python's
+    `os.path.abspath` instead).
+15. **Do not use a CUDA index.** macOS torch wheels come from PyPI with MPS built in; indexes
+    such as `download.pytorch.org/whl/cu130` do not work on macOS.
+    `nvidia-cublas-cu12`/`nvidia-cudnn-cu12` do not exist for macOS and are **not** in
+    requirements/asr.txt.
+16. **The wizard needs Qt and a desktop.** `python3 -m mamidlabs.wizard` exits with code **2**
+    and `wizard.error.no_pyside` when PySide6 is missing (`wizard/setup.py` is therefore
+    imported lazily); there is no `DISPLAY` check on macOS. The wizard's pure helpers
+    (`wizard/__init__.py`) are tested without Qt. The recommendation looks at **unified
+    memory** and Apple Silicon; a local profile is not recommended for an Intel Mac.
+17. **macOS bash 3.2.** All `scripts/*.sh`, including the wizard/packaging scripts, use
+    `#!/bin/bash` and contain no bash 4+ features; `packaging/macos/build-dmg.sh` only runs on
+    macOS (`hdiutil`) and is only checked with `bash -n` in CI.
+18. **The RAG index is untrusted content.** The `search_folder` result goes to the model with
+    the `[UNTRUSTED CONTENT…]` label and triggers write/execute approval in that turn. The
+    index is kept in `tools/rag/bound-<hash>.json`; the hash is taken from **the real path
+    exactly as-is** (not lower-cased) (same as the Linux edition; macOS volumes are usually
+    case-insensitive). `hf-hub.py` sets `HF_HOME` **before the import**; on a SHA256 mismatch
+    the downloaded file is deleted (never leave a silently corrupt model).
 
-## 15. Değişiklik yaparken kontrol listesi
+## 15. Checklist when making changes
 
-- [ ] İlgili testleri çalıştır; yeni davranışa test ekle (`python -m pytest -q`).
-- [ ] Kullanıcıya görünen metin Türkçe ve doğru karakterlerle mi?
-- [ ] Kurulum/kaldırma etkisi: yeni dosya ya da klasör kökün dışına yazıyor mu?
-      Yazıyorsa kaldırıcıya ekle. Varsayılan olarak her şey kökün altında kalmalı
-      (tek istisna: `~/Applications/MamidLabs.app`).
-- [ ] `README.md`, `docs/kurulum.md`, `docs/teknik-notlar.md`, `CHANGELOG.md` ve
-      **bu dosya** güncel mi?
-- [ ] Sunucu argümanları ya da profil sabitleri değişti mi? (Windows sürümüyle
-      hizayı koru.)
-- [ ] Betik değişiklikleri bash 3.2 ile uyumlu mu (`bash -n` yeterli değil;
-      bash 4+ özelliği kullanmadığından emin ol)?
-- [ ] Sürüm çıkarılacaksa: `__version__` + `pyproject.toml`, CHANGELOG bölümü ve
-      `v<sürüm>` etiketi aynı mı?
+- [ ] Run the relevant tests; add a test for new behaviour (`python -m pytest -q`).
+- [ ] Is the user-visible text in English, with the correct characters?
+- [ ] Install/uninstall impact: does a new file or folder write outside the root? If so, add it
+      to the uninstaller. By default everything must stay under the root (single exception:
+      `~/Applications/MamidLabs.app`).
+- [ ] Are `README.md`, `docs/install.md`, `docs/technical-notes.md`, `CHANGELOG.md` and **this
+      file** up to date?
+- [ ] Did the server arguments or profile constants change? (Keep the alignment with the
+      Windows edition.)
+- [ ] Are the script changes compatible with bash 3.2 (`bash -n` is not enough; make sure no
+      bash 4+ feature is used)?
+- [ ] If a release is being cut: are `__version__` + `pyproject.toml`, the CHANGELOG section and
+      the `v<version>` tag consistent?
 
-## 16. Değişiklik günlüğü
+## 16. Changelog
 
-Her özellik/değişiklik için bir satır ekle (en yeni üstte).
+Add one line for every feature/change (newest at the top).
 
-| Tarih | Değişiklik | Dosyalar |
+| Date | Change | Files |
 |---|---|---|
-| 2026-10-18 | **Lisans Windows sürümüyle pariteye getirildi: PolyForm Strict 1.0.0 (kaynak-açık; yalnızca ticari olmayan kullanım).** `LICENSE` (BOM'suz, LF, 3619 bayt) ve `EULA.txt` (UTF-8 BOM'lu, 4833 bayt) Windows `MamidLabsTR` deposundan **byte düzeyinde** kopyalandı; README lisans bölümü ve `tests/test_packaging_contract.py` lisans testi (LICENSE başlığı + EULA BOM) güncellendi; `.dmg` betiği zaten `EULA.txt`/`LICENSE` dosyalarını pakete gömüyor. `pyproject.toml` sınıflandırıcısı `License :: Other/Proprietary License` kalır (PolyForm OSI onaylı değil). Sürüm değişmedi (1.0.0). | LICENSE, EULA.txt, README.md, tests/test_packaging_contract.py, CHANGELOG.md, AGENTS.md |
-| 2026-10-18 | **Bağlam sıkıştırma: uzun sohbette taşma zarifçe karşılanır (Windows paritesi).** Sıkıştırma iki geçişli (önce araç çıktısının başı, yetmezse araç/assistant metni kısa işaretle değiştirilir; mesaj silinmez, `tool_calls`/`tool` eşleşmesi korunur). İstem hâlâ sığmıyorsa araçlar sunulmaz, modelden eldeki bulgularla görünür yanıt istenir ve `max_tokens` kalan odaya kısılır; "sıkıştırıldı" durum notu yalnızca gerçekten kısaldıysa gösterilir. | mamidlabs/core/inference.py, mamidlabs/locales/{tr,en}.json, tests/test_inference.py, AGENTS.md, CHANGELOG.md, docs/teknik-notlar.md |
-| 2026-10-18 | **Bağlı klasörde yerel (çevrimdışı) RAG: `search_folder` aracı.** Yeni işçi `rag-tools.py` bağlı klasörü tarayıp BM25 (k1=1.2, b=0.75 + 1.6× tam-ifade bonusu) ile en ilgili metin parçalarını `[dosya:satır]` biçiminde döndürür; indeks `tools/rag/bound-<hash>.json`'da dosya imzasıyla (yol+mtime+boyut) önbelleklenir, bozulursa sessizce yeniden kurulur. `node_modules`/`.git`/`venv` gibi klasörler ve ikili/çok büyük dosyalar atlanır; kod çözme utf-8 → cp1254 → latin-1. Araç, bağlı-klasör dosya araçlarıyla aynı kapıdan geçer (ses turunda sunulmaz; `is_file_intent` ise sunulur) ve **güvenilmeyen** sayılır. | mamidlabs/workers/rag-tools.py, mamidlabs/core/tools.py, mamidlabs/core/paths.py, tests/test_rag_tools.py |
-| 2026-10-18 | **İstem enjeksiyonuna karşı sertleştirme.** `search_web`/`fetch_page`/`read_document`/`read_images_ocr`/`read_bound_file`/`search_folder` sonuçları modele `chat.untrusted_prefix` etiketiyle sunulur; sistem istemi (`prompt.untrusted`) bu içeriğin **talimat değil veri** olduğunu söyler. O turda güvenilmeyen içerik okunduysa `run_command`/`write_bound_file` "Tam erişim" çipi açıkken bile onay ister (`inference.approval_required`); onay penceresi nedeni yazar (`chat.approval_untrusted`). | mamidlabs/core/inference.py, mamidlabs/ui/main_window.py, mamidlabs/locales/*, tests/test_prompt_injection.py |
-| 2026-10-18 | **Otomatik çaba (MAX/FLASH için istek başına).** MAX ve FLASH aynı model olduğundan, `Profiller → "Otomatik çaba (soruya göre)"` açıkken (`api.json:autoEffort`, varsayılan `true`) `inference.auto_reasoning_effort` tur başına `low`/`medium`/`xhigh` seçer ve istek gövdesine `chat_template_kwargs.reasoning_effort` olarak konur (yalnızca yerel sağlayıcı; LITE şablonu yok sayar). Seçim tur boyunca sabit → model yeniden yüklenmez, KV öneki bozulmaz. | mamidlabs/core/inference.py, mamidlabs/core/settings.py, mamidlabs/ui/main_window.py, mamidlabs/locales/*, tests/test_auto_effort.py |
-| 2026-10-18 | **Model indirmede SHA256 doğrulama + kaldığı yerden sürme.** `hf-hub.py` eksik dosyayı `hf_hub_download` ile sürdürür, indirme bitince SHA256 doğrular (katalogdaki sabit `sha256` ya da Hugging Face LFS metadata özeti; repo/revision başına önbellek) ve uyuşmazsa bozuk dosyayı siler. `CatalogFile`'a isteğe bağlı `sha256`, kurulum payload'ına `sha256` + `mtp` sözlüğü eklendi (worker `mtpRepo` dizesini de kabul eder). | mamidlabs/workers/hf-hub.py, mamidlabs/core/profiles.py, scripts/install-mamidlabs.sh, tests/test_model_download_integrity.py |
-| 2026-10-16 | **Yayın iş akışı eklendi (`.dmg`).** `v*` etiketi itilince `packaging/macos/build-dmg.sh` ile `.dmg` derlenir ve **sabit adla** (`MamidLabs.dmg`) GitHub Release'e yüklenir; README'ye "Hazır paket (.dmg)" bölümü ve `releases/latest/download/MamidLabs.dmg` bağlantısı eklendi. Dal/PR koşuları yalnızca artifact üretir; etiket `__version__` ile eşleşmezse iş durur. | .github/workflows/kurulum-paketi.yml, README.md, CHANGELOG.md, AGENTS.md |
-| 2026-10-16 | **Kurulum sihirbazı + donanım ölçümü + `.dmg` paketi eklendi; çalışma anı TR/ENG yerelleştirme bağlandı.** Qt6 `QWizard` (13 sayfa) ilk adımda **Türkçe mi English mi** diye sorar; seçim canlı çevirir ve `settings/api.json:language`'a yazılır. `hwinfo` **birleşik belleğe** bakar (Apple Silicon ≥ 32 GB → PRO, ≥ 16 GB → LITE, Intel/az bellek → API). `packaging/macos/build-dmg.sh` sihirbazı gömen bir `.dmg` üretir (`MamidLabs Kurulum.app` + gömülü kaynaklar). `install-mamidlabs.sh` artık `--language` alıp ilerleme/özet dosyaları yazıyor. i18n kablolaması tüm arayüze, çekirdeğe (`inference`, `tools`, `settings`) ve CLI'a uygulandı; `conftest.py` dil durumunu sıfırlar. Testler: `test_hwinfo.py`, `test_wizard.py` (saf), `test_wizard_gui.py` (başsız Qt), `test_i18n.py`, `test_packaging_contract.py` (toplam 158). | `mamidlabs/core/{i18n,hwinfo}.py`, `mamidlabs/locales/*`, `mamidlabs/wizard/*`, `mamidlabs/ui/*`, `mamidlabs/__main__.py`, `scripts/*`, `packaging/macos/*`, `pyproject.toml`, `conftest.py`, `tests/*`, `README.md`, `CHANGELOG.md` |
-| 2026-10-16 | **macOS sürümü ilk kez yazıldı (1.0.0).** Linux portu (Python 3.12 + PySide6/Qt6) temel alınarak macOS'a uyarlandı; sabitler, davranışlar ve araç kümesi Windows sürümüyle birebir korundu. Kurulum kökü `~/Library/Application Support/mamidlabs`; bellek kapısı `nvidia-smi` yerine birleşik bellek (`vm_stat` + `hw.pagesize`, `MAMIDLABS_FREE_MEM_MIB` ile geçersiz kılınabilir); llama.cpp Metal (macos-arm64/x64); torch PyPI'dan (MPS), CUDA index'i ve `nvidia-*` paketleri kaldırıldı; transcriber macOS'ta CPU'ya sabitlendi; `run_command` `/bin/zsh`; web User-Agent macOS; PDF yazı tipleri macOS + matplotlib DejaVu; 7-Zip Homebrew yolları; `.desktop` yerine `.app` paketi (`Info.plist` + `MacOS-MamidLabs` + PNG→ICNS); kurulum/yönetim/kaldırma/smoke betikleri bash 3.2 uyumlu; CI `macos-latest`; testler platforma duyarlı ve yeni bellek testleri eklendi. | tümü |
+| 2026-10-18 | **Licence brought to parity with the Windows edition: PolyForm Strict 1.0.0 (source-available; noncommercial use only).** `LICENSE` (no BOM, LF, 3619 bytes) and `EULA.txt` (UTF-8 BOM, 4833 bytes) were copied **byte-for-byte** from the Windows `MamidLabsTR` repository; the README licence section and the licence test in `tests/test_packaging_contract.py` (LICENSE heading + EULA BOM) were updated; the `.dmg` script already embeds `EULA.txt`/`LICENSE`. The `pyproject.toml` classifier stays `License :: Other/Proprietary License` (PolyForm is not OSI-approved). Version unchanged (1.0.0). | LICENSE, EULA.txt, README.md, tests/test_packaging_contract.py, CHANGELOG.md, AGENTS.md |
+| 2026-10-18 | **Context compaction: overflow in long chats is handled gracefully (Windows parity).** Compaction has two passes (first the head of the tool output, then, if that is not enough, the tool/assistant text is replaced with a short marker; messages are not deleted, the `tool_calls`/`tool` pairing is preserved). If the prompt still does not fit, tools are not offered, the model is asked for a visible answer from the findings present, and `max_tokens` is reduced to the remaining room; the "compacted" status note is only shown when something was actually shortened. | mamidlabs/core/inference.py, mamidlabs/locales/{en,tr}.json, tests/test_inference.py, AGENTS.md, CHANGELOG.md, docs/technical-notes.md |
+| 2026-10-18 | **Local (offline) RAG in the bound folder: the `search_folder` tool.** The new `rag-tools.py` worker scans the bound folder and returns the most relevant text chunks in `[file:line]` form using BM25 (k1=1.2, b=0.75 + a 1.6× exact-phrase bonus); the index is cached in `tools/rag/bound-<hash>.json` with a file signature (path+mtime+size) and is rebuilt silently when corrupt. Folders such as `node_modules`/`.git`/`venv` and binary/oversized files are skipped; decoding is utf-8 → cp1254 → latin-1. The tool goes through the same gate as the bound-folder file tools (not offered on an audio turn; offered when `is_file_intent`) and counts as **untrusted**. | mamidlabs/workers/rag-tools.py, mamidlabs/core/tools.py, mamidlabs/core/paths.py, tests/test_rag_tools.py |
+| 2026-10-18 | **Hardening against prompt injection.** The results of `search_web`/`fetch_page`/`read_document`/`read_images_ocr`/`read_bound_file`/`search_folder` are given to the model with the `chat.untrusted_prefix` label; the system prompt (`prompt.untrusted`) says this content is **data, not instructions**. If untrusted content was read in that turn, `run_command`/`write_bound_file` ask for approval even with the "Full access" chip on (`inference.approval_required`); the approval dialog also states the reason (`chat.approval_untrusted`). | mamidlabs/core/inference.py, mamidlabs/ui/main_window.py, mamidlabs/locales/*, tests/test_prompt_injection.py |
+| 2026-10-18 | **Auto effort (per request for MAX/FLASH).** Since MAX and FLASH are the same model, when `Profiles → "Auto effort (by question)"` is on (`api.json:autoEffort`, default `true`), `inference.auto_reasoning_effort` picks `low`/`medium`/`xhigh` per turn and puts it in the request body as `chat_template_kwargs.reasoning_effort` (local provider only; the LITE template ignores it). The choice is fixed for the whole turn → the model is not reloaded and the KV prefix is not broken. | mamidlabs/core/inference.py, mamidlabs/core/settings.py, mamidlabs/ui/main_window.py, mamidlabs/locales/*, tests/test_auto_effort.py |
+| 2026-10-18 | **SHA256 verification + resumable downloads for model downloads.** `hf-hub.py` resumes a missing file with `hf_hub_download`, verifies SHA256 once the download finishes (the pinned `sha256` from the catalog or the Hugging Face LFS metadata digest; cached per repo/revision), and deletes the corrupt file on a mismatch. An optional `sha256` was added to `CatalogFile`, and `sha256` + an `mtp` dict to the install payload (the worker also accepts the `mtpRepo` string). | mamidlabs/workers/hf-hub.py, mamidlabs/core/profiles.py, scripts/install-mamidlabs.sh, tests/test_model_download_integrity.py |
+| 2026-10-16 | **Release workflow added (`.dmg`).** When a `v*` tag is pushed, the `.dmg` is built with `packaging/macos/build-dmg.sh` and uploaded to the GitHub Release under a **fixed name** (`MamidLabs.dmg`); a "Ready-made package (.dmg)" section and the `releases/latest/download/MamidLabs.dmg` link were added to the README. Branch/PR runs only produce an artifact; the job fails when the tag does not match `__version__`. | .github/workflows/installer.yml, README.md, CHANGELOG.md, AGENTS.md |
+| 2026-10-16 | **Setup wizard + hardware measurement + `.dmg` package added; runtime EN/TR localisation wired in.** The Qt6 `QWizard` (13 pages) asks **English or Turkish** on the first page; the choice retranslates live and is written to `settings/api.json:language`. `hwinfo` looks at **unified memory** (Apple Silicon ≥ 32 GB → PRO, ≥ 16 GB → LITE, Intel/little memory → API). `packaging/macos/build-dmg.sh` produces a `.dmg` embedding the wizard (`MamidLabs Setup.app` + embedded sources). `install-mamidlabs.sh` now takes `--language` and writes progress/summary files. i18n wiring was applied to the whole interface, the core (`inference`, `tools`, `settings`) and the CLI; `conftest.py` resets the language state. Tests: `test_hwinfo.py`, `test_wizard.py` (pure), `test_wizard_gui.py` (headless Qt), `test_i18n.py`, `test_packaging_contract.py` (158 in total). | `mamidlabs/core/{i18n,hwinfo}.py`, `mamidlabs/locales/*`, `mamidlabs/wizard/*`, `mamidlabs/ui/*`, `mamidlabs/__main__.py`, `scripts/*`, `packaging/macos/*`, `pyproject.toml`, `conftest.py`, `tests/*`, `README.md`, `CHANGELOG.md` |
+| 2026-10-16 | **The macOS edition was written for the first time (1.0.0).** Adapted to macOS based on the Linux port (Python 3.12 + PySide6/Qt6); constants, behaviours and the tool set were kept identical to the Windows edition. Install root `~/Library/Application Support/mamidlabs`; the memory gate uses unified memory (`vm_stat` + `hw.pagesize`, overridable with `MAMIDLABS_FREE_MEM_MIB`) instead of `nvidia-smi`; llama.cpp Metal (macos-arm64/x64); torch from PyPI (MPS), the CUDA index and `nvidia-*` packages removed; transcriber pinned to the CPU on macOS; `run_command` `/bin/zsh`; macOS web User-Agent; PDF fonts macOS + matplotlib DejaVu; 7-Zip Homebrew paths; an `.app` bundle (`Info.plist` + `MacOS-MamidLabs` + PNG→ICNS) instead of `.desktop`; install/manage/uninstall/smoke scripts bash 3.2 compatible; CI `macos-latest`; tests platform-sensitive and new memory tests added. | all |

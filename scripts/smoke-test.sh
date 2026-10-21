@@ -6,7 +6,7 @@
 # the script exits non-zero if any required step fails.
 #
 #   smoke-test.sh [--profile max|flash|lite] [--skip-ocr] [--skip-media]
-#                 [--skip-chart] [--skip-mtp] [--root <yol>]
+#                 [--skip-chart] [--skip-mtp] [--root <path>]
 set -euo pipefail
 
 ROOT="${MAMIDLABS_ROOT:-$HOME/Library/Application Support/mamidlabs}"
@@ -27,13 +27,13 @@ while [[ $# -gt 0 ]]; do
     --skip-media) SKIP_MEDIA=1; shift ;;
     --skip-chart) SKIP_CHART=1; shift ;;
     --skip-mtp) SKIP_MTP=1; shift ;;
-    *) echo "bilinmeyen seçenek: $1" >&2; exit 2 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
 export MAMIDLABS_ROOT="$ROOT"
 PY="$ROOT/venv/app/bin/python"
-[[ -x "$PY" ]] || { echo "venv/app yok: $ROOT/venv/app" >&2; exit 1; }
+[[ -x "$PY" ]] || { echo "venv/app is missing: $ROOT/venv/app" >&2; exit 1; }
 
 PASS=0; FAIL=0; SKIP=0
 results=()
@@ -58,7 +58,7 @@ api() { # method path [json]
   fi
 }
 
-echo "MamidLabs smoke testi — kök: $ROOT"
+echo "MamidLabs smoke test — root: $ROOT"
 
 # --- 1. doctor ---------------------------------------------------------------
 echo "[doctor]"
@@ -69,7 +69,7 @@ else
 fi
 
 # --- 2. server start ---------------------------------------------------------
-echo "[sunucu]"
+echo "[server]"
 if [[ -z "$PROFILE" ]]; then
   PROFILE="$("$PY" - <<'PY'
 import json, os
@@ -84,9 +84,9 @@ PY
 )"
 fi
 if "$SCRIPT_DIR/manage-mamidlabs.sh" start "$PROFILE" >"$TMP/mamidlabs-start.txt" 2>&1; then
-  record "sunucu_baslat" PASS "profil=$PROFILE"
+  record "server_start" PASS "profile=$PROFILE"
 else
-  record "sunucu_baslat" FAIL "$(tail -n1 "$TMP/mamidlabs-start.txt")"
+  record "server_start" FAIL "$(tail -n1 "$TMP/mamidlabs-start.txt")"
 fi
 
 ready=0
@@ -94,21 +94,21 @@ for _ in $(seq 1 90); do
   if api GET /health >/dev/null 2>&1; then ready=1; break; fi
   sleep 2
 done
-[[ $ready -eq 1 ]] && record "saglik" PASS || record "saglik" FAIL "8080 yanıt vermiyor"
+[[ $ready -eq 1 ]] && record "health" PASS || record "health" FAIL "8080 is not responding"
 
 # --- 3. chat -----------------------------------------------------------------
-echo "[sohbet]"
-resp="$(api POST /v1/chat/completions '{"messages":[{"role":"user","content":"Merhaba, kısaca kendini tanıt."}],"max_tokens":512}' 2>/dev/null || true)"
+echo "[chat]"
+resp="$(api POST /v1/chat/completions '{"messages":[{"role":"user","content":"Hello, introduce yourself briefly."}],"max_tokens":512}' 2>/dev/null || true)"
 if [[ -n "$resp" ]] && grep -q '"content"' <<<"$resp"; then
-  record "sohbet" PASS
+  record "chat" PASS
 else
-  record "sohbet" FAIL
+  record "chat" FAIL
 fi
 
 # --- 4. chart ----------------------------------------------------------------
-echo "[grafik]"
+echo "[chart]"
 if [[ $SKIP_CHART -eq 1 ]]; then
-  record "grafik" SKIP "--skip-chart"
+  record "chart" SKIP "--skip-chart"
 else
   if "$PY" - <<'PY' >/dev/null 2>&1
 import sys, json
@@ -122,16 +122,16 @@ out = render_chart({"type": "bar", "title": "t", "labels": ["a", "b"], "values":
                    paths.output_dir("charts"))
 print(out)
 PY
-  then record "grafik" PASS; else record "grafik" FAIL; fi
+  then record "chart" PASS; else record "chart" FAIL; fi
 fi
 
 # --- 5. offline --------------------------------------------------------------
-echo "[cevrimdisi]"
+echo "[offline]"
 WORKERS_DIR="$("$PY" -c 'import os, mamidlabs.workers; print(os.path.dirname(mamidlabs.workers.__file__))' 2>/dev/null || true)"
 if [ -n "$WORKERS_DIR" ] && "$PY" "$WORKERS_DIR/mamidlabs-agent-tools.py" <<'PY' 2>/dev/null | grep -q '"error"'
 {"action": "search", "query": "test", "offline": true}
 PY
-then record "cevrimdisi" PASS; else record "cevrimdisi" SKIP "işçi yolu bulunamadı"; fi
+then record "offline" PASS; else record "offline" SKIP "worker path not found"; fi
 
 # --- 6. MTP ------------------------------------------------------------------
 echo "[mtp]"
@@ -142,10 +142,10 @@ else
     if grep -q 'draft_n_accepted' "$ROOT/logs/llama-server-"*.stdout.log 2>/dev/null; then
       record "mtp" PASS
     else
-      record "mtp" PASS "draft-mtp etkin"
+      record "mtp" PASS "draft-mtp enabled"
     fi
   else
-    record "mtp" SKIP "draft-mtp etkin değil"
+    record "mtp" SKIP "draft-mtp not enabled"
   fi
 fi
 
@@ -154,33 +154,33 @@ echo "[ocr]"
 if [[ $SKIP_OCR -eq 1 ]]; then
   record "ocr" SKIP "--skip-ocr"
 elif [[ -x "$ROOT/venv/ocr/bin/python" ]]; then
-  record "ocr" PASS "venv/ocr var"
+  record "ocr" PASS "venv/ocr present"
 else
-  record "ocr" SKIP "venv/ocr yok"
+  record "ocr" SKIP "venv/ocr missing"
 fi
 
 # --- 8. media ----------------------------------------------------------------
-echo "[medya]"
+echo "[media]"
 if [[ $SKIP_MEDIA -eq 1 ]]; then
-  record "gorsel" SKIP "--skip-media"
+  record "image" SKIP "--skip-media"
   record "video" SKIP "--skip-media"
 else
   if [[ -f "$ROOT/ComfyUI/main.py" ]]; then
     record "comfyui" PASS
   else
-    record "comfyui" FAIL "ComfyUI yok"
+    record "comfyui" FAIL "ComfyUI missing"
   fi
-  record "gorsel" SKIP "elle doğrulanmalı (ComfyUI üretimi)"
-  record "video" SKIP "elle doğrulanmalı (ComfyUI üretimi)"
+  record "image" SKIP "must be verified manually (ComfyUI generation)"
+  record "video" SKIP "must be verified manually (ComfyUI generation)"
 fi
 
 # --- 9. stop -----------------------------------------------------------------
-echo "[kapat]"
-"$SCRIPT_DIR/manage-mamidlabs.sh" stop >/dev/null 2>&1 && record "sunucu_durdur" PASS || record "sunucu_durdur" FAIL
+echo "[stop]"
+"$SCRIPT_DIR/manage-mamidlabs.sh" stop >/dev/null 2>&1 && record "server_stop" PASS || record "server_stop" FAIL
 
 # --- summary -----------------------------------------------------------------
 echo
-echo "Sonuç: $PASS geçti, $FAIL başarısız, $SKIP atlandı"
+echo "Result: $PASS passed, $FAIL failed, $SKIP skipped"
 {
   echo "{"
   echo "  \"root\": \"$ROOT\","

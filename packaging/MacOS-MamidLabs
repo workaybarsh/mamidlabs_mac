@@ -1,3 +1,3 @@
 #!/bin/zsh
-# MamidLabs.app iç yürütücüsü. Kurulum @ROOT@ yerine gerçek kurulum kökünü koyar.
+# Inner launcher of MamidLabs.app. The installer fills in @ROOT@ with the real install root.
 exec "@ROOT@/mamidlabs-launch" "$@"

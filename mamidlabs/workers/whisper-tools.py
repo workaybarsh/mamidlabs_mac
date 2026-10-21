@@ -1,24 +1,24 @@
-"""Ses dökum iscisi: `transcriber` paketini cagirir.
+"""Audio transcription worker: calls the `transcriber` package.
 
-Motor: faster-whisper large-v3-tr (Turkce). Ses olaylari (AST) ve konusmaci ayrimi
-(pyannote) varsayilan aciktir. Cikti bicimi kronolojik, zaman damgasiz:
+Engine: faster-whisper large-v3-tr (Turkish). Sound events (AST) and speaker diarisation
+(pyannote) are on by default. Output format is chronological, without timestamps:
 
-    (ayak sesleri)
-    Konusmaci: Geldin mi?
-    (kapi sesi)
-    Konusmaci: Evet, biraz geciktim.
+    (footsteps)
+    Speaker: Are you there?
+    (door sound)
+    Speaker: Yes, I was a little late.
 
-Arayuz/isci sozlesmesi: stdin'den JSON alir, stdout'a JSON yazar.
-    istek: {"action":"transcribe","path":...,"device":"auto|cuda|cpu","need_swap":bool,"profile":"lite|pro","language":"tr", ...}
-    istek: {"action":"plan","local_model_loaded":bool,"profile":"lite|pro"}   -> {"device":..,"need_swap":..}
-    istek: {"action":"unload"}   -> yuklu modelleri bellekten cikarir (VRAM/RAM iadesi)
-    yanit: {"text":..., "model":..., "chars":..., "events":N, "diarized":bool} ya da {"error":...}
+UI/worker contract: reads JSON from stdin, writes JSON to stdout.
+    request: {"action":"transcribe","path":...,"device":"auto|cuda|cpu","need_swap":bool,"profile":"lite|pro","language":"tr", ...}
+    request: {"action":"plan","local_model_loaded":bool,"profile":"lite|pro"}   -> {"device":..,"need_swap":..}
+    request: {"action":"unload"}   -> drops the loaded models from memory (VRAM/RAM release)
+    response: {"text":..., "model":..., "chars":..., "events":N, "diarized":bool} or {"error":...}
 
-SICAK (kalici) isci: `--serve` ile tek seferlik stdin yerine 127.0.0.1 uzerinde surekli
-calisir ve modelleri SÜREÇ İÇİNDE tutar. Boylece her ses turunda tekrarlanan sabit
-maliyet (Python baslatma + torch/transformers/faster-whisper importlari; ölçüldü ~10 sn,
-ilk/disk sogukken ~25 sn) oturumda BIR kez odenir; dil modeli VRAM'i gerektiginde cagiran
-`{"action":"unload"}` ile ses modellerini bosaltir (surec yasamaya devam eder).
+WARM (persistent) worker: with `--serve` it runs continuously on 127.0.0.1 instead of one-shot stdin
+and keeps the models IN-PROCESS. This way the fixed cost repeated on every audio turn (Python start +
+torch/transformers/faster-whisper imports; measured ~10 s, ~25 s on first/disk-cold run) is paid ONCE
+per session; when the language model needs the VRAM the caller drops the audio models with
+`{"action":"unload"}` (the process keeps living).
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ import os
 import pathlib
 import sys
 
-# transcriber paketi bu dosyanin yanindaki alt klasordedir (<kok>/agent/transcriber).
+# The transcriber package is in the subfolder next to this file (<root>/agent/transcriber).
 AGENT_DIR = pathlib.Path(__file__).resolve().parent
 if str(AGENT_DIR) not in sys.path:
     sys.path.insert(0, str(AGENT_DIR))
@@ -37,9 +37,9 @@ from transcriber import config, main as transcriber_main  # noqa: E402
 
 
 def _profile(req: dict):
-    """Ses hatti tier'i SECILI profil adindan gelir: 'lite', 'pro' ('max'/'flash'), ya da
-    eski adlar 'pc1'/'pc2'. Ad yoksa/taninmiyorsa tier'i makinenin toplam VRAM'i belirler
-    (bkz. config.select_profile_for)."""
+    """The audio-pipeline tier comes from the SELECTED profile name: 'lite', 'pro' ('max'/'flash'), or
+    the old names 'pc1'/'pc2'. When the name is missing/unrecognised the tier is determined by the
+    machine's total VRAM (see config.select_profile_for)."""
     language = str(req.get('language') or '').strip()
     overrides = {}
     if language and language != 'auto':
@@ -51,12 +51,12 @@ def _profile(req: dict):
 
 
 def transcribe(req: dict) -> dict:
-    # 'auto' oldugu gibi gecirilir; cihazi transcriber paketi kaydin suresine gore secer.
+    # 'auto' is passed through as-is; the transcriber package picks the device from the recording duration.
     device = str(req.get('device') or 'auto').lower()
     if device == 'gpu':
         device = 'cuda'
-    # need_swap: yerel 27B saglayicida dil modeli VRAM swap maliyeti oldugunu isciye bildir.
-    # Alan yoksa None birak (paket guvenli varsayilani uygular).
+    # need_swap: tell the worker that the local 27B provider has a language-model VRAM swap cost.
+    # Leave the field as None when absent (the package applies its safe default).
     need_swap = req.get('need_swap')
     if need_swap is not None:
         need_swap = bool(need_swap)
@@ -87,21 +87,21 @@ def transcribe(req: dict) -> dict:
 
 
 def plan(req: dict) -> dict:
-    """Ses isi baslamadan once (cihaz, swap) planini doner (bkz. config.choose_plan).
+    """Return the (device, swap) plan before an audio job starts (see config.choose_plan).
 
-    Oncelik: (1) dil modeliyle birlikte bos VRAM'e sigarsa GPU + swap yok; (2) sigmazsa ve
-    kayit KISAYSA (swap maliyeti kazanci asar) CPU'da RAM'e sigiyorsa CPU + swap yok;
-    (3) aksi halde (uzun kayit ya da RAM yetmiyor) GPU + mecburi swap. Kaydin suresi
-    `path`ten cozmeden tahmin edilir.
-    Isci bu plani arayuz/isci katmanina bildirir; dil modeli YALNIZCA swap gerektiginde
-    bosaltilir.
+    Priority: (1) if it fits into free VRAM together with the language model, GPU + no swap; (2) if it
+    does not fit and the recording is SHORT (the swap cost exceeds the gain) and it fits in RAM on the
+    CPU, CPU + no swap; (3) otherwise (a long recording or not enough RAM) GPU + mandatory swap. The
+    recording duration is estimated from `path` without decoding it.
+    The worker reports this plan to the UI/worker layer; the language model is evicted ONLY when a
+    swap is required.
     """
     profile = _profile(req)
     local = req.get('local_model_loaded')
     local = True if local is None else bool(local)
     vram = config.free_vram_mib()
     ram = config.available_ram_mib()
-    # Kaydin suresi (kisa -> CPU, uzun -> GPU ekonomisi icin). Dosyayi cozmeden tahmin edilir.
+    # The recording duration (short -> CPU, long -> GPU for economy). Estimated without decoding the file.
     duration = None
     path = str(req.get('path') or '')
     if path:
@@ -124,11 +124,11 @@ def plan(req: dict) -> dict:
 
 
 def unload(_req: dict | None = None) -> dict:
-    """Yuklu ASR/AST/konusmaci modellerini bellekten cikarir (VRAM/RAM iadesi).
+    """Drop the loaded ASR/AST/diarisation models from memory (VRAM/RAM release).
 
-    Kalici (sicak) isci modelleri surec icinde tutar; dil modeli VRAM'e geri yuklenmeden
-    ONCE ses modellerinin bosaltilmasi icin cagrilir (bkz. mamidlabs-inference.ps1). Surec
-    YASAMAYA DEVAM EDER (yalnizca modeller atilir): importlar/onbellekler sicak kalir.
+    The persistent (warm) worker keeps the models in-process; this is called to free the audio models
+    BEFORE the language model is loaded back into VRAM (see mamidlabs-inference.ps1). The process KEEPS
+    LIVING (only the models are dropped): imports/caches stay warm.
     """
     from transcriber import asr, diarize, events
     for fn in (getattr(asr, 'unload_model', None),
@@ -146,13 +146,13 @@ ACTIONS = {'transcribe': transcribe, 'plan': plan, 'unload': unload}
 
 
 def _dispatch(req: dict) -> dict:
-    """Tek bir istegi isler ve yanit sozlugunu doner (tek-atimlik main + serve ORTAK)."""
+    """Handle one request and return the response dict (shared by the one-shot main + serve)."""
     action = req.get('action')
     if action == 'ping':
         return {'ok': True, 'pid': os.getpid()}
     handler = ACTIONS.get(action)
     if not handler:
-        return {'error': 'bilinmeyen islem'}
+        return {'error': 'unknown action'}
     try:
         return handler(req)
     except Exception as exc:
@@ -160,7 +160,7 @@ def _dispatch(req: dict) -> dict:
 
 
 def _write_state(state_file: str, data: dict) -> None:
-    """Durum dosyasini ATOMIK yazar (istemci yarim/bozuk JSON okumasin)."""
+    """Write the state file ATOMICALLY (so the client never reads half/corrupt JSON)."""
     tmp = state_file + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
@@ -168,7 +168,7 @@ def _write_state(state_file: str, data: dict) -> None:
 
 
 def _parent_gone(parent_pid: int) -> bool:
-    """Ust surec (uygulama) kapandi mi? Kapanmissa sunucu kendini bitirir (sizinti yok)."""
+    """Has the parent process (the app) closed? If so the server ends itself (no leak)."""
     if not parent_pid:
         return False
     if os.name == 'nt':
@@ -198,7 +198,7 @@ def _parent_gone(parent_pid: int) -> bool:
 
 
 def _serve_client(conn) -> None:
-    """Tek istemci baglantisini isler: bir satir JSON istegi -> bir satir JSON yaniti."""
+    """Handle a single client connection: one line of JSON request -> one line of JSON response."""
     stream = conn.makefile('rwb')
     try:
         line = stream.readline()
@@ -207,7 +207,7 @@ def _serve_client(conn) -> None:
         try:
             req = json.loads(line.decode('utf-8') or '{}')
         except Exception as exc:
-            resp = {'error': 'gecersiz istek: %s' % exc}
+            resp = {'error': 'invalid request: %s' % exc}
         else:
             resp = _dispatch(req)
         stream.write((json.dumps(resp, ensure_ascii=False) + '\n').encode('utf-8'))
@@ -220,15 +220,15 @@ def _serve_client(conn) -> None:
 
 
 def serve(state_file: str, parent_pid: int = 0, idle_timeout: float = 600.0) -> int:
-    """Kalici (sicak) isci: modelleri SÜREÇ İÇİNDE tutar, istekleri 127.0.0.1 uzerinden alir.
+    """Persistent (warm) worker: keeps the models IN-PROCESS and takes requests over 127.0.0.1.
 
-    Amac: her ses turunda tekrarlanan sabit maliyeti (Python baslatma + torch/transformers/
-    faster-whisper importlari) oturumda BIR kez odemek. Dil modeli VRAM'i gerektiginde
-    cagiran taraf `{"action":"unload"}` ile ses modellerini bosaltir; surec yasamaya devam
-    eder ve sonraki turda yalnizca model YUKLEME maliyeti kalir.
+    Purpose: pay the fixed cost repeated on every audio turn (Python start + torch/transformers/
+    faster-whisper imports) ONCE per session. When the language model needs the VRAM the caller drops
+    the audio models with `{"action":"unload"}`; the process keeps living and only the model LOAD cost
+    remains for the next turn.
 
-    Guvenlik: `parent_pid` (uygulama) kapaninca ya da `idle_timeout` sn boyunca istek
-    gelmezse surec kendini bitirir; boylece artik (orphan) surec/VRAM/RAM sizintisi olmaz.
+    Safety: the process ends itself when `parent_pid` (the app) closes or no request arrives for
+    `idle_timeout` seconds; this way there is no orphan process/VRAM/RAM leak.
     """
     import socket
     import time
@@ -280,7 +280,7 @@ def serve(state_file: str, parent_pid: int = 0, idle_timeout: float = 600.0) -> 
 def main() -> None:
     argv = sys.argv[1:]
     if '--serve' in argv:
-        parser = argparse.ArgumentParser(description='Kalici (sicak) ses dokum iscisi')
+        parser = argparse.ArgumentParser(description='Persistent (warm) audio transcription worker')
         parser.add_argument('--serve', action='store_true')
         parser.add_argument('--state-file', required=True)
         parser.add_argument('--parent-pid', type=int, default=0)
@@ -295,7 +295,7 @@ def main() -> None:
     try:
         req = json.loads(sys.stdin.read() or '{}')
     except Exception as exc:
-        print(json.dumps({'error': 'gecersiz istek: %s' % exc}, ensure_ascii=False))
+        print(json.dumps({'error': 'invalid request: %s' % exc}, ensure_ascii=False))
         return
     print(json.dumps(_dispatch(req), ensure_ascii=False))
 

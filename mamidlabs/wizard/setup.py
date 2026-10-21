@@ -2,9 +2,9 @@
 
 Page order mirrors the Windows (Inno Setup) wizard exactly:
 
-    dil → karşılama → lisans → klasör → donanım raporu → profil →
-    (kendi modellerin) → (API) → (bileşenler) → hazır → kurulum →
-    özet → bitiş
+    language → welcome → licence → folder → hardware report → profile →
+    (your own models) → (API) → (components) → ready → install →
+    summary → finish
 
 The optional pages follow the profile choice: *own models* only for the "own"
 choice, *API* only when not downloading models, *components* only when a local
@@ -60,9 +60,9 @@ class LanguagePage(_Page):
         layout = QVBoxLayout(self)
         self.label = QLabel()
         self.combo = QComboBox()
-        self.combo.addItem("Türkçe", "tr")
         self.combo.addItem("English", "en")
-        self.combo.setCurrentIndex(0 if i18n.current() == "tr" else 1)
+        self.combo.addItem("Türkçe", "tr")
+        self.combo.setCurrentIndex(0 if i18n.current() == "en" else 1)
         self.combo.currentIndexChanged.connect(
             lambda _i: self.wizard()._set_language(self.combo.currentData()))
         layout.addWidget(self.label)
@@ -72,6 +72,7 @@ class LanguagePage(_Page):
     def retranslate(self) -> None:
         super().retranslate()
         self.label.setText(i18n.t("wizard.lang.label"))
+        self.combo.setCurrentIndex(0 if i18n.current() == "en" else 1)
 
 
 class WelcomePage(_Page):

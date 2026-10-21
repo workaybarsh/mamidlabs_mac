@@ -1,13 +1,14 @@
-name: Kurulum paketi
+name: Installer package
 
-# macOS .dmg paketini (kurulum sihirbazi ile birlikte) uretir ve sabit adla
-# (MamidLabs.dmg) GitHub Release'e yukler. Boylece README'deki
-# releases/latest/download/MamidLabs.dmg baglantisi her zaman en son surumu
-# dogrudan indirir. Surumun tek kaynagi mamidlabs/__init__.py icindeki __version__'dur.
+# Builds the macOS .dmg package (together with the setup wizard) and uploads it to
+# the GitHub Release under a fixed name (MamidLabs.dmg). This way the
+# releases/latest/download/MamidLabs.dmg link in the README always downloads the
+# latest version directly. The single source of the version is __version__ in
+# mamidlabs/__init__.py.
 #
-# Dal ve PR calistirmalari yalnizca derleyip artifact yukler; bir v* etiketi
-# itildiginde etiketin surumle ayni oldugu dogrulanir ve paket, CHANGELOG.md'deki
-# ilgili bolum surum notu olarak kullanilip GitHub Release'e yayimlanir.
+# Branch and PR runs only build and upload an artifact; when a v* tag is pushed the
+# tag is verified to match the version and the package is published to the GitHub
+# Release, using the matching CHANGELOG.md section as the release notes.
 on:
   workflow_dispatch:
   push:
@@ -23,7 +24,7 @@ on:
       - 'CHANGELOG.md'
       - 'LICENSE'
       - 'EULA.txt'
-      - '.github/workflows/kurulum-paketi.yml'
+      - '.github/workflows/installer.yml'
   pull_request:
     paths:
       - 'packaging/**'
@@ -35,10 +36,10 @@ on:
       - 'CHANGELOG.md'
       - 'LICENSE'
       - 'EULA.txt'
-      - '.github/workflows/kurulum-paketi.yml'
+      - '.github/workflows/installer.yml'
 
 jobs:
-  paket:
+  package:
     name: macOS · .dmg
     runs-on: macos-latest
     permissions:
@@ -46,29 +47,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Surumu oku
-        id: surum
+      - name: Read the version
+        id: version
         run: |
           VERSION="$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' mamidlabs/__init__.py | head -n1)"
           if [ -z "$VERSION" ]; then
-            echo "mamidlabs/__init__.py icinde __version__ bulunamadi" >&2
+            echo "__version__ not found in mamidlabs/__init__.py" >&2
             exit 1
           fi
           case "${GITHUB_REF}" in
             refs/tags/v*)
               if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
-                echo "Etiket (${GITHUB_REF_NAME}) surumle (v${VERSION}) ayni degil" >&2
+                echo "The tag (${GITHUB_REF_NAME}) does not match the version (v${VERSION})" >&2
                 exit 1
               fi
               ;;
           esac
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: .dmg derle
+      - name: Build the .dmg
         run: bash packaging/macos/build-dmg.sh --output dist
 
-      - name: Sabit adli kopya (dogrudan indirme)
-        run: cp dist/MamidLabs-Kurulum-*.dmg dist/MamidLabs.dmg
+      - name: Fixed-name copy (direct download)
+        run: cp dist/MamidLabs-Setup-*.dmg dist/MamidLabs.dmg
 
       - uses: actions/upload-artifact@v4
         with:
@@ -76,12 +77,12 @@ jobs:
           path: dist/MamidLabs.dmg
           retention-days: 14
 
-      - name: Surum yayimla (GitHub Release)
+      - name: Publish the release (GitHub Release)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION='${{ steps.surum.outputs.version }}'
+          VERSION='${{ steps.version.outputs.version }}'
           TAG="v$VERSION"
           awk -v v="$VERSION" '
             $0 ~ "^## \\[" v "\\]" { f = 1; next }
@@ -89,7 +90,7 @@ jobs:
             f { print }
           ' CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then
-            echo "CHANGELOG.md icinde [$VERSION] bolumu yok" >&2
+            echo "CHANGELOG.md has no [$VERSION] section" >&2
             exit 1
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -98,8 +99,8 @@ jobs:
             gh release create "$TAG" dist/MamidLabs.dmg \
               --title "MamidLabs $VERSION" --notes-file release-notes.md --verify-tag \
               || {
-                # Ayni etiket icin paralel bir kosu release'i once olusturmus olabilir
-                # (HTTP 422 "Release.tag_name already exists"); varsa uzerine yaz.
+                # A parallel run for the same tag may have created the release first
+                # (HTTP 422 "Release.tag_name already exists"); overwrite it if so.
                 gh release view "$TAG" >/dev/null 2>&1 && \
                   gh release upload "$TAG" dist/MamidLabs.dmg --clobber
               }

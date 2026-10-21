@@ -155,7 +155,7 @@ def test_fetch_download_verifies_sha_before_mtp(tmp_path, hfhub, monkeypatch):
     events = _events(hfhub, monkeypatch)
     hfhub.fetch({"repo": "a/b", "filename": "model.gguf", "target": str(target),
                  "bytes": len(payload), "mtp": {"repo": "a/b"}}, None, 1, 1)
-    assert any("doğrulandı" in text for _, text in events)  # verified
+    assert any("verified" in text for _, text in events)  # verified
     assert injected == [str(target)]  # MTP injected after verification
 
 

@@ -1,12 +1,12 @@
 #!/bin/bash
-# MamidLabs kurulum sihirbazını başlatır (Python 3.12 + PySide6 / Qt6).
+# Launches the MamidLabs setup wizard (Python 3.12 + PySide6 / Qt6).
 #
-# Kurulu bir kök varsa onun venv'ini, yoksa sistem python3'ünü kullanır; böylece
-# hem "git clone + ./scripts/mamidlabs-setup.sh" hem de kurulmuş sistemde
-# "mamidlabs-setup" aynı sihirbazı açar. Seçenekler (--root, --lang) sihirbaza
-# aynen geçirilir.
+# Uses the venv of an installed root when present, otherwise the system python3;
+# this way both "git clone + ./scripts/mamidlabs-setup.sh" and "mamidlabs-setup"
+# on an installed system open the same wizard. Options (--root, --lang) are passed
+# through to the wizard unchanged.
 #
-# macOS bash 3.2 ile uyumludur (bash 4+ özellikleri kullanılmaz).
+# Compatible with macOS bash 3.2 (no bash 4+ features).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,7 +22,7 @@ elif command -v python3 >/dev/null 2>&1; then
 fi
 
 if [ -z "$PYTHON" ]; then
-  echo "[hata] python3 bulunamadı (brew install python@3.12)" >&2
+  echo "[error] python3 not found (brew install python@3.12)" >&2
   exit 1
 fi
 

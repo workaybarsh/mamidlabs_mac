@@ -35,27 +35,27 @@ PYTHON=""
 
 usage() {
   cat <<'EOF'
-Kullanım: install-mamidlabs.sh [seçenekler]
+Usage: install-mamidlabs.sh [options]
 
-  --root <yol>        Kurulum kökü (varsayılan: ~/Library/Application Support/mamidlabs)
-  --profile <ad>      max | flash | lite  (model indirme profili)
-  --language <kod>    tr | en  (arayüz dili; settings/api.json'a yazılır)
-  --stage <liste>     Çalıştırılacak aşamalar (virgülle):
+  --root <path>       Install root (default: ~/Library/Application Support/mamidlabs)
+  --profile <name>    max | flash | lite  (model download profile)
+  --language <code>   en | tr  (interface language; written to settings/api.json)
+  --stage <list>      Stages to run (comma-separated):
                       preflight,layout,llama,python,comfyui,models,verify
-  --skip-media        ComfyUI ve görsel/video modellerini atla
-  --skip-audio        Ses dökümü (asr) ortamını atla
-  --skip-ocr          OCR ortamını atla
-  --skip-models       Dil modeli indirmeyi atla
-  --no-desktop        MamidLabs.app paketini kurma
-  --no-cuda           Yoksayılır (macOS'ta Metal/MPS her zaman kullanılır)
-  --force             Var olanı yeniden kur
-  -h, --help          Bu metin
+  --skip-media        Skip ComfyUI and the image/video models
+  --skip-audio        Skip the transcription (asr) environment
+  --skip-ocr          Skip the OCR environment
+  --skip-models       Skip the language model download
+  --no-desktop        Do not install the MamidLabs.app bundle
+  --no-cuda           Ignored (Metal/MPS is always used on macOS)
+  --force             Reinstall over the existing install
+  -h, --help          This text
 EOF
 }
 
 log()  { printf '\033[1;34m[MamidLabs]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[uyarı]\033[0m %s\n' "$*" >&2; }
-die()  { printf '\033[1;31m[hata]\033[0m %s\n' "$*" >&2; exit 1; }
+warn() { printf '\033[1;33m[warning]\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -64,7 +64,7 @@ while [ $# -gt 0 ]; do
     --language)
       case "$2" in
         tr|en) LANGUAGE="$2" ;;
-        *) die "geçersiz dil: $2 (tr|en)" ;;
+        *) die "invalid language: $2 (en|tr)" ;;
       esac
       shift 2 ;;
     --stage) STAGES="$2"; shift 2 ;;
@@ -76,7 +76,7 @@ while [ $# -gt 0 ]; do
     --no-cuda) shift ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) die "bilinmeyen seçenek: $1" ;;
+    *) die "unknown option: $1" ;;
   esac
 done
 
@@ -110,28 +110,28 @@ detect_gpu() { [ "$(uname -s)" = "Darwin" ]; }
 
 # --- stages ------------------------------------------------------------------
 stage_preflight() {
-  log "Ön koşullar denetleniyor"
-  detect_python || die "Python 3.11–3.13 bulunamadı. Kur: brew install python@3.12"
+  log "Checking prerequisites"
+  detect_python || die "Python 3.11–3.13 not found. Install: brew install python@3.12"
   log "Python: $PYTHON ($("$PYTHON" --version 2>&1))"
-  "$PYTHON" -c 'import venv' >/dev/null 2>&1 || die "venv modülü eksik."
-  have_cmd git || warn "git yok; ComfyUI aşaması atlanacak (brew install git)."
-  have_cmd curl || warn "curl yok; indirmeler başarısız olabilir."
-  have_cmd unzip || warn "unzip yok; llama.cpp çıkarılamaz (macOS'ta hazır gelir)."
+  "$PYTHON" -c 'import venv' >/dev/null 2>&1 || die "The venv module is missing."
+  have_cmd git || warn "git not found; the ComfyUI stage will be skipped (brew install git)."
+  have_cmd curl || warn "curl not found; downloads may fail."
+  have_cmd unzip || warn "unzip not found; llama.cpp cannot be extracted (ships with macOS)."
   if [ "$SKIP_MEDIA" -eq 0 ]; then
-    detect_gpu || warn "Metal görünmüyor; görsel/video üretimi çok yavaş olur."
+    detect_gpu || warn "Metal does not look available; image/video generation will be very slow."
   fi
   if have_cmd 7z || have_cmd 7za; then
     :
   else
-    warn "7-Zip yok; RAR okuma devre dışı olur (brew install sevenzip)."
+    warn "7-Zip not found; RAR reading will be disabled (brew install sevenzip)."
   fi
   local free_gb
   free_gb="$(df -Pk "$ROOT" 2>/dev/null | awk 'NR==2 {print int($4/1024/1024)}' || echo 0)"
-  [ "${free_gb:-0}" -ge 60 ] || warn "Boş disk ${free_gb} GB; LITE ~36 GB, MAX/FLASH ~52 GB ister."
+  [ "${free_gb:-0}" -ge 60 ] || warn "Free disk ${free_gb} GB; LITE needs ~36 GB, MAX/FLASH ~52 GB."
 }
 
 stage_layout() {
-  log "Program dosyaları yerleştiriliyor: $ROOT"
+  log "Installing program files: $ROOT"
   mkdir -p "$ROOT"
   local venv_dir="$ROOT/venv/app"
   "$PYTHON" -m venv --upgrade-deps "$venv_dir"
@@ -174,14 +174,14 @@ install_app_bundle() {
     iconutil -c icns "$iconset" -o "$app_dir/Contents/Resources/mamidlabs.icns" >/dev/null 2>&1 || true
   fi
   touch "$app_dir"
-  log "Uygulama paketi kuruldu: $app_dir"
+  log "Application bundle installed: $app_dir"
 }
 
 stage_llama() {
-  log "llama.cpp ($LLAMA_BUILD) indiriliyor (Metal)"
+  log "Downloading llama.cpp ($LLAMA_BUILD) (Metal)"
   local dir="$ROOT/llama.cpp/$LLAMA_BUILD"
   if [ -x "$dir/llama-server" ] && [ "$FORCE" -eq 0 ]; then
-    log "llama-server zaten var; atlanıyor."
+    log "llama-server already present; skipping."
     return
   fi
   mkdir -p "$dir"
@@ -195,19 +195,19 @@ stage_llama() {
   url="https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_BUILD}/${asset}"
   tmp="$ROOT/tools/downloads/llama.zip"
   mkdir -p "$(dirname "$tmp")"
-  log "İndiriliyor: $url"
-  if have_cmd curl; then curl -fL --retry 3 -o "$tmp" "$url"; else die "curl gerekli"; fi
+  log "Downloading: $url"
+  if have_cmd curl; then curl -fL --retry 3 -o "$tmp" "$url"; else die "curl is required"; fi
   (cd "$dir" && unzip -o -j "$tmp" 'llama-server' '*.dylib' '*.metallib' '*.metal' >/dev/null 2>&1 || true)
   # Some archives keep the binary in a subfolder.
   if [ ! -x "$dir/llama-server" ]; then
     find "$dir" -name 'llama-server' -type f -exec cp {} "$dir/llama-server" \; || true
   fi
   chmod +x "$dir/llama-server" 2>/dev/null || true
-  [ -x "$dir/llama-server" ] || die "llama-server çıkarılamadı ($url)"
+  [ -x "$dir/llama-server" ] || die "llama-server could not be extracted ($url)"
 }
 
 stage_python() {
-  log "Sanal ortamlar hazırlanıyor"
+  log "Preparing virtual environments"
   # On macOS torch wheels ship with MPS (Metal) built in; no extra index needed.
   if [ "$SKIP_MEDIA" -eq 0 ]; then
     local venv_dir="$ROOT/venv/imagegen"
@@ -233,9 +233,9 @@ stage_python() {
 }
 
 stage_comfyui() {
-  [ "$SKIP_MEDIA" -eq 0 ] || { log "ComfyUI atlanıyor (--skip-media)"; return; }
-  have_cmd git || { warn "git yok; ComfyUI atlanıyor."; return; }
-  log "ComfyUI ($COMFY_COMMIT) hazırlanıyor"
+  [ "$SKIP_MEDIA" -eq 0 ] || { log "Skipping ComfyUI (--skip-media)"; return; }
+  have_cmd git || { warn "git not found; skipping ComfyUI."; return; }
+  log "Preparing ComfyUI ($COMFY_COMMIT)"
   local dir="$ROOT/ComfyUI"
   if [ -d "$dir/.git" ]; then
     (cd "$dir" && git fetch --quiet --tags origin && git checkout --quiet "$COMFY_COMMIT")
@@ -256,15 +256,15 @@ stage_comfyui() {
   }
   clone_node "https://github.com/city96/ComfyUI-GGUF.git" "$COMFY_GGUF_COMMIT" "ComfyUI-GGUF"
   clone_node "https://github.com/conradlocke/comfyui-krea2edit.git" "$KREA2EDIT_COMMIT" "comfyui-krea2edit"
-  log "ComfyUI bağımlılıkları kuruluyor"
+  log "Installing ComfyUI dependencies"
   "$ROOT/venv/imagegen/bin/python" -m pip install --quiet -r "$dir/requirements.txt" || \
-    warn "ComfyUI requirements kurulumu kısmen başarısız."
+    warn "ComfyUI requirements installation partially failed."
 }
 
 stage_models() {
-  [ "$SKIP_MODELS" -eq 0 ] || { log "Model indirme atlanıyor (--skip-models)"; return; }
-  [ -n "$PROFILE" ] || { log "Profil verilmedi (--profile); model indirme atlandı."; return; }
-  log "Profil modelleri indiriliyor: $PROFILE"
+  [ "$SKIP_MODELS" -eq 0 ] || { log "Skipping the model download (--skip-models)"; return; }
+  [ -n "$PROFILE" ] || { log "No profile given (--profile); model download skipped."; return; }
+  log "Downloading profile models: $PROFILE"
   "$ROOT/venv/app/bin/python" - "$PROFILE" <<'PY'
 import sys
 sys.path.insert(0, ".")
@@ -282,7 +282,7 @@ profile = get_profile(profile_id)
 for item in profile.files:
     target = paths.root / item.target
     if target.exists():
-        print(f"var: {item.target}")
+        print(f"exists: {item.target}")
         continue
     payload = {"action": "download", "repo": item.repo, "revision": item.revision,
                "filename": item.filename, "target": str(target),
@@ -290,34 +290,34 @@ for item in profile.files:
                "mtp": ({"repo": item.mtp_repo} if item.mtp_repo else None)}
     result = runner.run("hf-hub.py", payload, env_name="app", timeout=7200)
     if result.get("error"):
-        print(f"HATA {item.target}: {result['error']}")
+        print(f"ERROR {item.target}: {result['error']}")
     else:
-        print(f"indirildi: {item.target}")
+        print(f"downloaded: {item.target}")
 PY
 }
 
 stage_verify() {
-  log "Kurulum doğrulanıyor"
+  log "Verifying the installation"
   local ok=1
   "$ROOT/venv/app/bin/python" -c 'import mamidlabs; print("mamidlabs", mamidlabs.__version__)' || ok=0
-  [ -x "$ROOT/llama.cpp/$LLAMA_BUILD/llama-server" ] || { warn "llama-server eksik"; ok=0; }
+  [ -x "$ROOT/llama.cpp/$LLAMA_BUILD/llama-server" ] || { warn "llama-server missing"; ok=0; }
   if [ "$SKIP_MEDIA" -eq 0 ]; then
-    [ -f "$ROOT/ComfyUI/main.py" ] || { warn "ComfyUI eksik"; ok=0; }
+    [ -f "$ROOT/ComfyUI/main.py" ] || { warn "ComfyUI missing"; ok=0; }
   fi
   "$ROOT/venv/app/bin/python" -m mamidlabs doctor || ok=0
-  [ "$ok" -eq 1 ] && log "Kurulum tamam." || warn "Kurulum eksiklerle bitti; 'mamidlabs doctor' çıktısına bak."
+  [ "$ok" -eq 1 ] && log "Installation complete." || warn "The installation finished with missing pieces; see the 'mamidlabs doctor' output."
 }
 
 # --- main --------------------------------------------------------------------
-detect_python || die "Python 3.11–3.13 bulunamadı. Kur: brew install python@3.12"
+detect_python || die "Python 3.11–3.13 not found. Install: brew install python@3.12"
 ROOT="$(abs_path "$PYTHON" "$ROOT")"
 export MAMIDLABS_ROOT="$ROOT"
 
 mkdir -p "$ROOT/tools/downloads" "$ROOT/logs"
-log "Kurulum kökü: $ROOT"
-log "Aşamalar: $STAGES"
+log "Install root: $ROOT"
+log "Stages: $STAGES"
 
-# Arayüz dili (sihirbaz/CLI): settings/api.json'a yazılır; uygulama açılışta okur.
+# Interface language (wizard/CLI): written to settings/api.json; read at app start.
 if [ -n "$LANGUAGE" ]; then
   mkdir -p "$ROOT/settings"
   "$PYTHON" - "$ROOT/settings/api.json" "$LANGUAGE" <<'PY'
@@ -339,7 +339,7 @@ with open(path, "w", encoding="utf-8") as handle:
 PY
 fi
 
-# Sihirbazın ilerleme kaynağı: satır 1 = adım no, satır 2 = toplam, satır 3 = ad.
+# The wizard's progress source: line 1 = step number, line 2 = total, line 3 = name.
 progress_file="$ROOT/logs/kurulum-adim.txt"
 total=0
 for stage in preflight layout llama python comfyui models verify; do
@@ -354,17 +354,17 @@ for stage in preflight layout llama python comfyui models verify; do
 done
 printf '%s\n%s\n%s\n' "$total" "$total" "verify" > "$progress_file"
 
-# Özet: sihirbazın son sayfası bu dosyayı gösterir.
+# Summary: the wizard's last page shows this file.
 {
-  echo "MamidLabs kurulum özeti"
-  echo "Kök: $ROOT"
-  echo "Aşamalar: $STAGES"
-  [ -n "$PROFILE" ] && echo "Profil: $PROFILE"
-  [ -n "$LANGUAGE" ] && echo "Dil: $LANGUAGE"
+  echo "MamidLabs install summary"
+  echo "Root: $ROOT"
+  echo "Stages: $STAGES"
+  [ -n "$PROFILE" ] && echo "Profile: $PROFILE"
+  [ -n "$LANGUAGE" ] && echo "Language: $LANGUAGE"
   echo
   if [ -x "$ROOT/venv/app/bin/python" ]; then
     "$ROOT/venv/app/bin/python" -m mamidlabs doctor 2>&1 || true
   fi
 } > "$ROOT/logs/kurulum-ozeti.txt"
 
-log "Bitti. Başlatmak için: $ROOT/mamidlabs-launch (ya da ~/Applications/MamidLabs.app)"
+log "Done. To start: $ROOT/mamidlabs-launch (or ~/Applications/MamidLabs.app)"

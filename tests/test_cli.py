@@ -28,5 +28,5 @@ def test_doctor_reports_missing(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("MAMIDLABS_ROOT", str(tmp_path))
     assert main(["doctor"]) == 0
     out = capsys.readouterr().out
-    assert "Kurulum kökü" in out
-    assert "YOK" in out
+    assert "Install root" in out
+    assert "MISSING" in out

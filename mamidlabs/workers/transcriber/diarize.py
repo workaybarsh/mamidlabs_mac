@@ -1,7 +1,7 @@
-"""Konusmaci ayrimi (pyannote). Token yoksa/kurulu degilse sessizce atlanir.
+"""Speaker diarisation (pyannote). Silently skipped when there is no token or it is not installed.
 
-Cok kişili kayitlarda satirlara "Konusmaci 1 / Konusmaci 2" etiketi eklemek icin kullanilir.
-pyannote/speaker-diarization-3.1 Hugging Face'te bir kabul (token) ister.
+Used to add a "Speaker 1 / Speaker 2" label to the lines of multi-person recordings.
+pyannote/speaker-diarization-3.1 requires an acceptance (token) on Hugging Face.
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def unload_pipeline():
 
 
 def diarize(wav_path: str, token: str | None = None, device: str = 'cuda') -> list[dict]:
-    """[{start, end, speaker}, ...]. Token yoksa ya da pyannote kurulu degilse [] doner."""
+    """[{start, end, speaker}, ...]. Returns [] when there is no token or pyannote is not installed."""
     token = resolve_token(token)
     if not token:
         return []
@@ -63,7 +63,7 @@ def diarize(wav_path: str, token: str | None = None, device: str = 'cuda') -> li
     except Exception:
         return []
     turns: list[dict] = []
-    # pyannote yeni surumleri Annotation yerine DiarizeOutput dondurebilir.
+    # Newer pyannote versions may return a DiarizeOutput instead of an Annotation.
     it = annotation
     if hasattr(annotation, 'speaker_diarization'):
         it = annotation.speaker_diarization

@@ -1,6 +1,6 @@
-"""Video yardimcilari: kare cikarma, bilgi okuma, kucuk resim.
+"""Video helpers: frame extraction, info reading, thumbnails.
 
-imagegen venv'i ile calisir (PyAV kurulu). stdin'den JSON alir, stdout'a JSON yazar.
+Runs with the imagegen venv (PyAV installed). Reads JSON from stdin, writes JSON to stdout.
 """
 import json
 import os
@@ -10,7 +10,7 @@ import sys
 
 MAX_VIDEO_FILE_BYTES = 512 * 1024 * 1024
 MAX_VIDEO_DURATION_SECONDS = 600
-# Kurulum kokunu ortam degiskeninden oku (bkz. _root.py).
+# Read the install root from the environment (see _root.py).
 from _root import install_root
 
 OUTPUT_ROOT = (install_root() / 'outputs')
@@ -18,14 +18,14 @@ OUTPUT_ROOT = (install_root() / 'outputs')
 
 def _open(path):
     if os.path.getsize(path) > MAX_VIDEO_FILE_BYTES:
-        raise ValueError('Video boyutu guvenlik sinirini asti.')
+        raise ValueError('The video size exceeded the safety limit.')
     import av
     return av.open(path)
 
 
 def _validate_duration(container):
     if container.duration and container.duration / 1000000.0 > MAX_VIDEO_DURATION_SECONDS:
-        raise ValueError('Video suresi guvenlik sinirini asti.')
+        raise ValueError('The video duration exceeded the safety limit.')
 
 
 def _output_path(value):
@@ -33,7 +33,7 @@ def _output_path(value):
     try:
         candidate.relative_to(OUTPUT_ROOT)
     except ValueError:
-        raise ValueError('Video kare cikisi outputs klasoru icinde olmali.')
+        raise ValueError('The video frame output must be inside the outputs folder.')
     candidate.parent.mkdir(parents=True, exist_ok=True)
     return candidate
 
@@ -54,7 +54,7 @@ def video_info(req):
 
 
 def video_frame(req):
-    """which = 'first' | 'last' -> PNG olarak kaydeder."""
+    """which = 'first' | 'last' -> saves as PNG."""
     which = req.get('which', 'first')
     out = _output_path(req['out'])
     with _open(req['path']) as container:
@@ -67,7 +67,7 @@ def video_frame(req):
             if which == 'first':
                 break
         if picked is None:
-            return {'error': 'videodan kare okunamadi'}
+            return {'error': 'could not read a frame from the video'}
         image = picked.to_image()
         max_side = int(req.get('max_side', 1280))
         if max(image.size) > max_side:
@@ -89,7 +89,7 @@ def main():
     req = json.loads(sys.stdin.read() or '{}')
     handler = ACTIONS.get(req.get('action'))
     if not handler:
-        print(json.dumps({'error': 'bilinmeyen islem'}, ensure_ascii=False))
+        print(json.dumps({'error': 'unknown action'}, ensure_ascii=False))
         return
     try:
         print(json.dumps(handler(req), ensure_ascii=False))

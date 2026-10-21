@@ -8,17 +8,17 @@ ROOT="${MAMIDLABS_ROOT:-$HOME/Library/Application Support/mamidlabs}"
 
 usage() {
   cat <<'EOF'
-Kullanım: manage-mamidlabs.sh <eylem> [profil]
+Usage: manage-mamidlabs.sh <action> [profile]
 
-Eylemler:
-  start [profil]   Yerel modeli başlat (max|flash|lite; varsayılan ayardaki)
-  stop             Yerel modeli durdur
-  switch [profil]  Profil değiştir (start ile aynı; farkı yok)
-  status           Etkin profili göster
-  closecomfy       Boştaki ComfyUI'yi kapat
-  comfy            ComfyUI'yi başlat (yalnızca medya üretimi için)
-  doctor           Kurulumu denetle
-  profiles         Profil durumunu göster
+Actions:
+  start [profile]  Start the local model (max|flash|lite; default from settings)
+  stop             Stop the local model
+  switch [profile] Change the profile (same as start; no difference)
+  status           Show the active profile
+  closecomfy       Close the idle ComfyUI
+  comfy            Start ComfyUI (media generation only)
+  doctor           Inspect the installation
+  profiles         Show the profile status
 EOF
 }
 
@@ -41,14 +41,14 @@ case "$action" in
   profiles)   exec "$PY" -m mamidlabs --root "$ROOT" profiles ;;
   comfy)
     python="$ROOT/venv/imagegen/bin/python"
-    [[ -x "$python" ]] || { echo "imagegen ortamı yok (kurulum --skip-media olabilir)." >&2; exit 1; }
+    [[ -x "$python" ]] || { echo "the imagegen environment is missing (the install may have used --skip-media)." >&2; exit 1; }
     extra=""
     [[ -f "$ROOT/settings/comfy-extra-models.yaml" ]] && extra="--extra-model-paths-config $ROOT/settings/comfy-extra-models.yaml"
     mkdir -p "$ROOT/logs"
     nohup "$python" "$ROOT/ComfyUI/main.py" --listen 127.0.0.1 --port 8188 $extra \
       >"$ROOT/logs/comfyui.out.log" 2>"$ROOT/logs/comfyui.err.log" &
-    echo "ComfyUI başlatıldı (PID $!) : http://127.0.0.1:8188"
+    echo "ComfyUI started (PID $!) : http://127.0.0.1:8188"
     ;;
   ""|-h|--help) usage ;;
-  *) echo "bilinmeyen eylem: $action" >&2; usage; exit 2 ;;
+  *) echo "unknown action: $action" >&2; usage; exit 2 ;;
 esac

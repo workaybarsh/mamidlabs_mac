@@ -1,4 +1,4 @@
-# macOS deposu: satır sonları her zaman LF olsun (CRLF karışıklığı olmasın).
+# macOS repository: line endings are always LF (no CRLF mix-ups).
 * text=auto eol=lf
 
 *.sh   text eol=lf
@@ -13,7 +13,7 @@
 *.ini  text eol=lf
 *.toml text eol=lf
 
-# İkili dosyalar
+# Binary files
 *.gguf   binary
 *.mmproj binary
 *.png    binary

@@ -86,7 +86,7 @@ def _f(label: str, target: str, repo: str, revision: str, filename: str, size: i
 
 # --- language models ---------------------------------------------------------
 _27B_GGUF = _f(
-    "Dil modeli (Qwen3.8 27B IQ4_XS)",
+    "Language model (Qwen3.8 27B IQ4_XS)",
     "models/Qwen3.8-27B-Abliterated-IQ4_XS/Qwen3.8-27B-Abliterated-IQ4_XS.gguf",
     "windowsxp811203/Qwen3.8-27B-Abliterated-GGUF",
     "efb07baa690a1bc7beb53ee067b4b57c7025b5e7",
@@ -94,7 +94,7 @@ _27B_GGUF = _f(
     15309039488,
 )
 _27B_MMPROJ = _f(
-    "Görsel projektörü (mmproj F16)",
+    "Vision projector (mmproj F16)",
     "models/Qwen3.8-27B-Abliterated-IQ4_XS/mmproj-Qwen3.8-27B-Abliterated-F16.gguf",
     "windowsxp811203/Qwen3.8-27B-Abliterated-GGUF",
     "efb07baa690a1bc7beb53ee067b4b57c7025b5e7",
@@ -102,7 +102,7 @@ _27B_MMPROJ = _f(
     927607328,
 )
 _LITE_GGUF = _f(
-    "Dil modeli (Huihui-Qwen3.5 9B Q5_K_M)",
+    "Language model (Huihui-Qwen3.5 9B Q5_K_M)",
     "models/Huihui-Qwen3.5-9B-abliterated-i1-GGUF/Huihui-Qwen3.5-9B-abliterated.i1-Q5_K_M.gguf",
     "mradermacher/Huihui-Qwen3.5-9B-abliterated-i1-GGUF",
     "4cc15cd6f643e668e18902550f80e2274a212473",
@@ -111,7 +111,7 @@ _LITE_GGUF = _f(
     mtp_repo="huihui-ai/Huihui-Qwen3.5-9B-abliterated",
 )
 _LITE_MMPROJ = _f(
-    "Görsel projektörü (mmproj Q8_0)",
+    "Vision projector (mmproj Q8_0)",
     "models/Huihui-Qwen3.5-9B-abliterated-i1-GGUF/Huihui-Qwen3.5-9B-abliterated.mmproj-Q8_0.gguf",
     "mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF",
     "9f646d7eda193ddf2348134f3bff3d49eed7a2c6",
@@ -121,7 +121,7 @@ _LITE_MMPROJ = _f(
 
 # --- shared media assets -----------------------------------------------------
 _KREA2_FP8 = _f(
-    "Krea-2 Turbo (görsel)",
+    "Krea-2 Turbo (image)",
     "ComfyUI/models/diffusion_models/krea2_turbo_fp8_scaled.safetensors",
     "Comfy-Org/Krea-2",
     "e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96",
@@ -129,7 +129,7 @@ _KREA2_FP8 = _f(
     13141730784,
 )
 _KREA2_GGUF = _f(
-    "Krea-2 Turbo GGUF Q4_K_M (görsel, ComfyUI-GGUF custom node gerektirir)",
+    "Krea-2 Turbo GGUF Q4_K_M (image, requires the ComfyUI-GGUF custom node)",
     "ComfyUI/models/unet/krea2_turbo-Q4_K_M.gguf",
     "vantagewithai/Krea-2-Turbo-GGUF",
     "390847e2835c16bdf82303731e3d35b874760d89",
@@ -137,7 +137,7 @@ _KREA2_GGUF = _f(
     7486289184,
 )
 _QWEN3VL = _f(
-    "Qwen3-VL 4B metin kodlayıcı",
+    "Qwen3-VL 4B text encoder",
     "ComfyUI/models/text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
     "Comfy-Org/Krea-2",
     "e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96",
@@ -153,7 +153,7 @@ _QWEN_VAE = _f(
     253806246,
 )
 _KREA2_STYLE = _f(
-    "Krea-2 stil referansı LoRA (isteğe bağlı)",
+    "Krea-2 style reference LoRA (optional)",
     "ComfyUI/models/loras/krea2_style_reference.safetensors",
     "Comfy-Org/Krea-2",
     "e5ea8b4dd7f38f348b138eb0fe29f92c0e367e96",
@@ -161,7 +161,7 @@ _KREA2_STYLE = _f(
     457111760,
 )
 _KREA2_REALISM = _f(
-    "Krea-2 gerçekçilik LoRA (yalnızca gerçekçi görsel istendiğinde kullanılır)",
+    "Krea-2 realism LoRA (only used when a realistic image is requested)",
     "ComfyUI/models/loras/krea2_realism_lora.safetensors",
     "gokaygokay/Krea-2-Realism-LoRA",
     "32f0436ac10e985134364e7555898c9f121a46ce",
@@ -169,7 +169,7 @@ _KREA2_REALISM = _f(
     469288512,
 )
 _KREA2_IDENTITY = _f(
-    "Krea 2 Identity Edit v1.2 LoRA (fotoğraf düzenleme, kimlik korunur)",
+    "Krea 2 Identity Edit v1.2 LoRA (photo editing, identity preserved)",
     "ComfyUI/models/loras/krea2_identity_edit_v1_2.safetensors",
     "conradlocke/krea2-identity-edit",
     "89e9e7a09ee2e5c9331e952063d79b1b8a703280",
@@ -185,7 +185,7 @@ _WAN_MODEL = _f(
     9999658848,
 )
 _UMT5 = _f(
-    "UMT5 XXL metin kodlayıcı",
+    "UMT5 XXL text encoder",
     "ComfyUI/models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
     "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
     "c4f60d30c55a624e35427060fdd217579a6c1d77",
@@ -210,22 +210,22 @@ _LITE_MEDIA = [_KREA2_GGUF, _QWEN3VL, _QWEN_VAE, _KREA2_STYLE, _KREA2_REALISM,
 
 CATALOG: dict[str, Profile] = {
     "max": Profile(
-        "max", "Qwen3.8 MAX", "32 GB birleşik bellek",
-        "Derin akıl yürütme, 32K bağlam, görsel okuma açık. Metal'de MTP açıkken hızlı; bellek "
-        "bütçesi birleşik bellekten (unified memory) ölçülür.",
+        "max", "Qwen3.8 MAX", "32 GB unified memory",
+        "Deep reasoning, 32K context, image understanding on. Fast on Metal with MTP enabled; "
+        "the memory budget is measured from unified memory.",
         [_27B_GGUF, _27B_MMPROJ, *_PRO_MEDIA],
     ),
     "flash": Profile(
-        "flash", "Qwen3.8 27B", "32 GB birleşik bellek",
-        "MAX ile aynı dosyalar, daha kısa düşünme çabası. Metal'de MTP açıkken hızlı.",
+        "flash", "Qwen3.8 27B", "32 GB unified memory",
+        "The same files as MAX, with a shorter reasoning effort. Fast on Metal with MTP enabled.",
         [_27B_GGUF, _27B_MMPROJ, *_PRO_MEDIA],
     ),
     "lite": Profile(
-        "lite", "Qwen3.5 9B LITE", "16 GB birleşik bellek",
-        "16 GB birleşik bellekli Mac'ler için 9B dil modeli (32K bağlam, mmproj Q8_0 ile görsel "
-        "anlama), görselde Krea-2 Turbo'nun GGUF kuantize (Q4_K_M) sürümü, videoda 480p / 3 sn "
-        "sınırı. ComfyUI MPS düşük bellek modunda çalışır; üretim 27B profiline göre belirgin "
-        "yavaştır.",
+        "lite", "Qwen3.5 9B LITE", "16 GB unified memory",
+        "A 9B language model for Macs with 16 GB of unified memory (32K context, image "
+        "understanding with mmproj Q8_0), the quantized (Q4_K_M) GGUF build of Krea-2 Turbo for "
+        "images, and a 480p / 3 s limit for video. ComfyUI runs in low-memory MPS mode; "
+        "generation is noticeably slower than on the 27B profile.",
         [_LITE_GGUF, _LITE_MMPROJ, *_LITE_MEDIA],
     ),
 }
@@ -235,7 +235,7 @@ def get_profile(profile_id: str) -> Profile:
     try:
         return CATALOG[profile_id]
     except KeyError:
-        raise KeyError(f"Bilinmeyen profil: {profile_id}") from None
+        raise KeyError(f"Unknown profile: {profile_id}") from None
 
 
 def profile_from_alias(alias: str) -> str:
@@ -275,7 +275,7 @@ def model_path(paths: Paths, profile_id: str) -> Path:
     for item in get_profile(profile_id).chat_files():
         if "mmproj" not in item.filename:
             return paths.root / item.target
-    raise KeyError(f"{profile_id} için dil modeli tanımlı değil.")
+    raise KeyError(f"no language model is defined for {profile_id}.")
 
 
 def projector_path(paths: Paths, profile_id: str) -> Path | None:

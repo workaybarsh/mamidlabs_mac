@@ -1,13 +1,13 @@
-"""Whisper backend (faster-whisper). Model + compute_type config profilinden gelir.
+"""Whisper backend (faster-whisper). The model + compute_type come from the config profile.
 
-HALUSINASYON AZALTMA (birinci oncelik dogruluk):
-- Silero VAD ile konusma disi araliklar Whisper'a hic verilmez (`vad_filter`).
-- `condition_on_previous_text=False`: tekrar dongulerini (loop) beslemez.
-- `no_speech_threshold` / `log_prob_threshold` / `compression_ratio_threshold`: dusuk
-  guvenli ve sikisan segmentleri eleme.
-- Dusuk sicaklik yedegi (temperature fallback) + `suppress_blank`.
-- Segment sonrasi filtre: bos/sadece noktalama, bilinen halusinasyon kalibi, asiri
-  tekrar ve dusuk olasilikli segmentler atilir; ardisik tekrarlar tekilleştirilir.
+HALLUCINATION REDUCTION (accuracy first):
+- With Silero VAD, non-speech ranges are never given to Whisper (`vad_filter`).
+- `condition_on_previous_text=False`: does not feed repetition loops.
+- `no_speech_threshold` / `log_prob_threshold` / `compression_ratio_threshold`: drop low-confidence
+  and squeezed segments.
+- Low-temperature fallback + `suppress_blank`.
+- Post-segment filter: empty/punctuation-only segments, known hallucination patterns, excessive
+  repetition and low-probability segments are dropped; consecutive repeats are de-duplicated.
 """
 from __future__ import annotations
 
@@ -18,10 +18,11 @@ _MODEL_CACHE: dict = {}
 
 
 def _add_cuda_dll_dirs() -> None:
-    """CUDA calisma zamani DLL'lerini (pip'in nvidia-*-cu12 paketleri) DLL yoluna ekler.
+    """Add the CUDA runtime DLLs (pip's nvidia-*-cu12 packages) to the DLL path.
 
-    CTranslate2 (faster-whisper) Windows'ta cublas64_12.dll / cudnn DLL'lerini arar; tam
-    CUDA araci kurulu degilse bu paketlerden gelir. Bulunamazsa GPU denemesi CPU'ya duser.
+    CTranslate2 (faster-whisper) looks for cublas64_12.dll / the cudnn DLLs on Windows; when the
+    full CUDA toolkit is not installed they come from these packages. If they are not found the GPU
+    attempt falls back to the CPU.
     """
     if os.name != 'nt':
         return
@@ -43,7 +44,7 @@ def _add_cuda_dll_dirs() -> None:
             os.add_dll_directory(path)
         except Exception:
             pass
-    # CTranslate2 LoadLibrary kullanir; PATH'te de olmali (add_dll_directory yetmez).
+    # CTranslate2 uses LoadLibrary; it must also be on PATH (add_dll_directory is not enough).
     if extra:
         os.environ['PATH'] = os.pathsep.join(extra + [os.environ.get('PATH', '')])
 
@@ -54,8 +55,8 @@ def _normalize(text: str) -> str:
     return t
 
 
-# Whisper'in sessizlikte/yanlis dilde urettigi tipik kaliplar (Turkce + genel).
-# Karsilastirma _normalize ile yapildigi icin kalıplar da normalize edilir.
+# Typical patterns Whisper produces on silence/in the wrong language (Turkish + generic).
+# Comparisons are made with _normalize, so the patterns are normalised too.
 _RAW_HALLUCINATIONS = {
     'Altyazı M.K.', 'İzlediğiniz için teşekkürler', 'Abone ol', 'Abone olmayı unutmayın',
     'Thanks for watching', 'Thank you for watching', 'Subscribe', 'Please subscribe',
@@ -68,17 +69,17 @@ def _is_hallucination(segment) -> bool:
     text = (segment.text or '').strip()
     if not text:
         return True
-    # Sadece noktalama/muzik isareti.
+    # Punctuation/music symbol only.
     if not re.search(r'\w', text, flags=re.UNICODE):
         return True
     norm = _normalize(text)
     if norm in HALLUCINATION_PHRASES:
         return True
-    # Ayni kelimenin asiri tekrari (orn. "tamam tamam tamam tamam ...").
+    # Excessive repetition of the same word (e.g. "okay okay okay okay ...").
     words = norm.split()
     if len(words) >= 6 and len(set(words)) <= 2:
         return True
-    # Dusuk olasilik + yuksek "konusma yok" olasiligi: VAD kacagi.
+    # Low probability + high "no speech" probability: a VAD leak.
     try:
         if segment.no_speech_prob is not None and segment.no_speech_prob > 0.85 \
                 and segment.avg_logprob is not None and segment.avg_logprob < -0.4:
@@ -91,7 +92,7 @@ def _is_hallucination(segment) -> bool:
 
 
 def load_model(profile, device: str = 'cuda'):
-    """faster-whisper modelini yukler (onbellekli). CUDA yoksa CPU + int8'e duser."""
+    """Load the faster-whisper model (cached). Falls back to CPU + int8 when CUDA is unavailable."""
     from faster_whisper import WhisperModel
 
     _add_cuda_dll_dirs()
@@ -106,7 +107,7 @@ def load_model(profile, device: str = 'cuda'):
                 profile.whisper_model, device=device, compute_type=compute_type, device_index=0,
             )
         except Exception:
-            # CUDA basarisizsa CPU + int8.
+            # If CUDA fails, CPU + int8.
             if device == 'cuda':
                 key = (profile.whisper_model, 'cpu', 'int8')
                 _MODEL_CACHE[key] = WhisperModel(profile.whisper_model, device='cpu', compute_type='int8')
@@ -134,11 +135,11 @@ def transcribe(wav_path: str, profile, device: str = 'cuda', initial_prompt: str
                offset: float = 0.0) -> dict:
     """wav_path -> {language, language_probability, duration, segments:[...]}.
 
-    offset: parcali (chunk) islemde parcanin ana kayittaki baslangic saniyesi.
+    offset: the start second of the chunk within the main recording.
     """
     model = load_model(profile, device)
-    # 16 kHz mono WAV'i float32 numpy dizisine cevirip faster-whisper'a veriyoruz:
-    # boylece faster-whisper kendi PyAV surumune bagli kalmaz (daha hizli, cift decode yok).
+    # Convert the 16 kHz mono WAV into a float32 numpy array and hand it to faster-whisper:
+    # this way faster-whisper is not tied to its own PyAV build (faster, no double decode).
     from . import audio as _audio
     if isinstance(wav_path, str):
         samples = _audio.read_mono_float32(wav_path)
@@ -165,7 +166,7 @@ def transcribe(wav_path: str, profile, device: str = 'cuda', initial_prompt: str
         if _is_hallucination(segment):
             continue
         norm = _normalize(segment.text)
-        if norm == previous_norm:      # ardisik birebir tekrar
+        if norm == previous_norm:      # consecutive identical repeat
             continue
         previous_norm = norm
         words = []

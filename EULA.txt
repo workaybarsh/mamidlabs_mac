@@ -1,20 +1,20 @@
-﻿MAMIDLABS — LİSANS BİLDİRİMİ (PolyForm Strict 1.0.0)
+﻿MAMIDLABS — LICENSE NOTICE (PolyForm Strict 1.0.0)
 
-Sürüm 1.0 — Yürürlük tarihi: 2026
-Telif Hakkı (c) 2026 Aybars Haydar Altuntaş.
+Version 1.0 — Effective date: 2026
+Copyright (c) 2026 Aybars Haydar Altuntaş.
 
-Bu yazılım, PolyForm Strict License 1.0.0 koşulları altında sunulur. Kısa özet (bağlayıcı olan
-aşağıdaki resmî İngilizce metindir): Yazılım yalnızca TİCARİ OLMAYAN amaçlarla kullanılabilir;
-yazılımı dağıtamazsınız ve yazılım üzerinde değişiklik veya türev eser yapamazsınız. Ticari
-kullanım için Hak Sahibinden önceden yazılı izin gerekir. Resmî metin ve güncel sürüm:
-https://polyformproject.org/licenses/strict/1.0.0
+This software is offered under the terms of the PolyForm Strict License 1.0.0. Short summary (the
+official English text below is binding): the software may be used for NONCOMMERCIAL purposes only;
+you may not distribute the software, and you may not make changes or new works based on it.
+Commercial use requires prior written permission from the Licensor. Official text and current
+version: https://polyformproject.org/licenses/strict/1.0.0
 
-Kullanılan yapay zekâ modelleri (Qwen, Krea 2, Krea 2 Identity Edit LoRA, Wan 2.2 vb.) ve üçüncü
-taraf bileşenler (llama.cpp, ComfyUI, ComfyUI-GGUF, comfyui-krea2edit vb.) Hak Sahibine ait
-değildir ve kendi lisanslarına tabidir; bu lisans onları kapsamaz. Bu modellerin kötü niyetli,
-yasa dışı veya üçüncü kişilerin haklarını ihlal eden amaçlarla kullanılmasından münhasıran
-Kullanıcı sorumludur. Kullanıcı, yürürlükteki mevzuata ve üçüncü kişilerin haklarına uymakla
-yükümlüdür.
+The AI models used (Qwen, Krea 2, Krea 2 Identity Edit LoRA, Wan 2.2 etc.) and third-party
+components (llama.cpp, ComfyUI, ComfyUI-GGUF, comfyui-krea2edit etc.) are not owned by the Licensor
+and are subject to their own licenses; this license does not cover them. The User is solely
+responsible for any use of these models for malicious or illegal purposes or in ways that infringe
+third-party rights. The User is obliged to comply with applicable law and the rights of third
+parties.
 
 --------------------------------------------------------------------
 

@@ -62,7 +62,7 @@ class WorkerRunner:
         if not path.is_absolute():
             path = self.script(str(script))
         if not path.exists():
-            return {"error": f"işçi bulunamadı: {path}"}
+            return {"error": f"worker not found: {path}"}
         try:
             completed = subprocess.run(  # noqa: S603
                 [str(self.python(env_name)), str(path)],
@@ -71,16 +71,16 @@ class WorkerRunner:
                 env=self.child_env(extra_env), cwd=str(self.paths.root),
             )
         except subprocess.TimeoutExpired:
-            return {"error": f"işçi zaman aşımına uğradı ({timeout:.0f} sn): {path.name}"}
+            return {"error": f"worker timed out ({timeout:.0f} s): {path.name}"}
         except OSError as exc:
-            return {"error": f"işçi çalıştırılamadı: {exc}"}
+            return {"error": f"worker could not be started: {exc}"}
         stdout = completed.stdout.decode("utf-8", errors="replace").strip()
         if not stdout:
             stderr = completed.stderr.decode("utf-8", errors="replace").strip()
-            return {"error": f"işçi çıktı vermedi: {stderr[:400] or 'çıktı yok'}"}
+            return {"error": f"worker produced no output: {stderr[:400] or 'no output'}"}
         # The last non-empty line is the response (workers may log before it).
         line = stdout.splitlines()[-1]
         try:
             return json.loads(line)
         except ValueError:
-            return {"error": f"işçi geçersiz JSON döndürdü: {line[:400]}"}
+            return {"error": f"worker returned invalid JSON: {line[:400]}"}

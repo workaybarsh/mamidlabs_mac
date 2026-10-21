@@ -12,49 +12,48 @@ MAX_PAGE_BYTES = 3_000_000
 MAX_REFERENCE_BYTES = 20 * 1024 * 1024
 MAX_REFERENCE_PIXELS = 40_000_000
 
-# Yavas DNS'te socket.getaddrinfo bloke edebilir; cozumleme ayri bir is
-# parcaciginda yapilir ve join(timeout) ile sinirlanir. Bu sure asilirsa
-# _pin_resolution OSError yukseltir; cagirici bunu mevcut temiz hata JSON'u
-# akisina cevirir (istisna disari sizmaz).
+# On a slow DNS server socket.getaddrinfo can block; resolution runs in a separate
+# thread and is bounded by join(timeout). If that time is exceeded
+# _pin_resolution raises OSError; the caller turns it into the existing clean error
+# JSON flow (the exception never escapes).
 DNS_TIMEOUT_SECONDS = 5
-# ddgs birden fazla arama motoru backend'ini kendi icinde denedigi icin
-# search_web'in toplam suresi backend x timeout kadar (olculdu: ~60 sn)
-# olabiliyordu. Tek bir toplam ust sinir (deadline) uygulanir; asilirsa kalan
-# backend'ler beklenmez, elde sonuc varsa o doner, yoksa temiz hata JSON'u.
+# ddgs tries several search-engine backends internally, so search_web's total time
+# could be backend x timeout (measured: ~60 s). A single overall deadline is
+# applied; when exceeded, the remaining backends are not awaited, any collected
+# results are returned, and otherwise a clean error JSON is returned.
 SEARCH_DEADLINE_SECONDS = 25
 
-# DNS rebinding korumasi: _validate_remote_url hostu bir kez cozup dogruluyordu,
-# ama gercek baglanti (urllib/http.client) ayri bir DNS sorgusuyla tekrar
-# cozuyordu. Dusuk TTL'li kotu niyetli bir DNS kaydi, dogrulama aninda herkese
-# acik bir IP, hemen ardindan gelen baglanti aninda ozel/yerel bir IP donerek
-# bu iki cozumleme arasindaki farktan (TOCTOU) yararlanabilirdi. Cozum: her
-# hostu dogrulanirken tam olarak hangi adreslere cozuldugunu kaydet, ve
-# socket.getaddrinfo'yu bu script suresince o host icin sabitle; boylece
-# gercek baglanti da ayni, onceden dogrulanmis adresi kullanmak zorunda kalir.
-# Bu script tek bir istegi isleyip cikan tek-atimlik bir surec oldugu icin
-# (main() dogrudan tek JSON istegi okur), process-genelinde monkeypatch
-# guvenlidir; ayri bir istek/thread'le yarismaz.
+# DNS rebinding protection: _validate_remote_url resolved the host once and
+# validated it, but the real connection (urllib/http.client) resolved it again with
+# a separate DNS query. A malicious low-TTL DNS record could return a public IP at
+# validation time and a private/local IP at connection time, exploiting the
+# difference between the two resolutions (TOCTOU). Solution: record exactly which
+# addresses each host resolved to during validation, and pin
+# socket.getaddrinfo for that host for the lifetime of this script; the real
+# connection is then forced to use the same, pre-validated address. Because this
+# script handles one request and exits (main() reads a single JSON request),
+# process-wide monkeypatching is safe; it does not race another request/thread.
 _pinned_addresses: dict = {}
 _real_getaddrinfo = socket.getaddrinfo
 
 
 def _pin_resolution(host, port):
-    # Cozumlemeyi ayri bir is parcaciginda yapip join(timeout) ile sinirlariz;
-    # boylece yavas/askida kalan bir DNS sorgusu bloke etmez. Secilen adresler
-    # (pinning) degismez; yalnizca bir sure siniri eklenir.
+    # Resolve in a separate thread bounded by join(timeout) so a slow/hanging DNS
+    # query cannot block. The chosen addresses (pinning) do not change; only a time
+    # limit is added.
     outcome = {}
 
     def _resolve():
         try:
             outcome['results'] = _real_getaddrinfo(host, port, type=socket.SOCK_STREAM)
-        except Exception as exc:  # cagirana aynen iletilir
+        except Exception as exc:  # passed through to the caller
             outcome['error'] = exc
 
     worker = threading.Thread(target=_resolve, daemon=True)
     worker.start()
     worker.join(DNS_TIMEOUT_SECONDS)
     if worker.is_alive():
-        raise OSError('DNS cozumlemesi zaman asimina ugradi.')
+        raise OSError('DNS resolution timed out.')
     if 'error' in outcome:
         raise outcome['error']
     results = outcome['results']
@@ -74,11 +73,11 @@ def _validate_remote_url(value):
     """Reject local/reserved destinations before urllib can connect to them."""
     parsed = urlparse(str(value))
     if parsed.scheme not in ('http', 'https') or not parsed.hostname:
-        raise ValueError('Yalnizca gecerli http/https adresleri okunabilir.')
+        raise ValueError('Only valid http/https addresses can be read.')
     if parsed.username or parsed.password or parsed.fragment:
-        raise ValueError('URL kimlik bilgisi veya fragment iceremez.')
+        raise ValueError('The URL cannot contain credentials or a fragment.')
     if parsed.port not in (None, 80, 443):
-        raise ValueError('Yalnizca 80 ve 443 portlari kullanilabilir.')
+        raise ValueError('Only ports 80 and 443 can be used.')
 
     host = parsed.hostname.rstrip('.').lower()
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
@@ -88,17 +87,17 @@ def _validate_remote_url(value):
         try:
             addresses = _pin_resolution(host, port)
         except (OSError, ValueError):
-            raise ValueError('URL hostu cozumlenemedi.')
+            raise ValueError('The URL host could not be resolved.')
     if not addresses or any(not address.is_global for address in addresses):
         _pinned_addresses.pop(host, None)
-        raise ValueError('Yerel, ozel veya ayrilmis ag adreslerine erisim engellendi.')
+        raise ValueError('Access to local, private or reserved network addresses is blocked.')
     return parsed.geturl()
 
 
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        # Yonlendirilen hostu da ayni sekilde pinler; boylece yonlendirme
-        # zincirindeki her adim kendi dogrulanmis adresine baglanir.
+        # The redirected host is pinned the same way, so every step of the redirect
+        # chain connects to its own validated address.
         _validate_remote_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -118,7 +117,7 @@ def _read_limited(response, limit):
             break
         total += len(chunk)
         if total > limit:
-            raise ValueError('Uzak yanit boyut sinirini asti.')
+            raise ValueError('The remote response exceeded the size limit.')
         chunks.append(chunk)
     return b''.join(chunks)
 
@@ -132,9 +131,9 @@ def search_web(request):
 
     def _search():
         try:
-            # Ulasilamayan bir arama motoru isi dakikalarca bekletmesin.
-            # Degerlendirme backend'leri sirayla/paralel denedigi icin toplam
-            # sureyi dis taraftaki deadline sinirlar.
+            # An unreachable search engine must not block the job for minutes.
+            # The evaluation backends are tried sequentially/in parallel, so the
+            # overall time is bounded by the outer deadline.
             for item in DDGS(timeout=15).text(query, max_results=count):
                 collected.append(item)
         except Exception as exc:
@@ -144,13 +143,13 @@ def search_web(request):
     worker.start()
     worker.join(SEARCH_DEADLINE_SECONDS)
     if worker.is_alive():
-        # Toplam sure siniri asildi: kalan backend'leri beklemeyi birak. Elde
-        # edilmis sonuc varsa onlari, yoksa gecerli bir hata JSON'u dondur.
+        # The overall deadline was exceeded: stop waiting for the remaining backends.
+        # Return any collected results, otherwise a valid error JSON.
         if collected:
             return json.dumps(collected, ensure_ascii=False)
-        return json.dumps({'error': 'Web aramasi zaman asimina ugradi: sonuc yok.'}, ensure_ascii=False)
+        return json.dumps({'error': 'Web search timed out: no results.'}, ensure_ascii=False)
     if 'error' in failure:
-        return json.dumps({'error': f'Web aramasi basarisiz: {failure["error"]}'}, ensure_ascii=False)
+        return json.dumps({'error': f'Web search failed: {failure["error"]}'}, ensure_ascii=False)
     return json.dumps(collected, ensure_ascii=False)
 
 
@@ -170,12 +169,12 @@ def fetch_page(request):
     text = re.sub(r'[ \t\r\f\v]+', ' ', text)
     text = re.sub(r'\n\s*\n\s*', '\n', text).strip()
     if len(text) > 20000:
-        text = text[:20000] + '\n[sayfa 20K karakterde kesildi]'
+        text = text[:20000] + '\n[page truncated at 20K characters]'
     return json.dumps({'url': url, 'text': text}, ensure_ascii=False)
 
 
 def find_reference_image(request):
-    """Web'de gorsel arar, ilk uygun olani indirir ve yerel yolunu dondurur."""
+    """Search the web for an image, download the first suitable one and return its local path."""
     import os
     import urllib.request
     from ddgs import DDGS
@@ -183,8 +182,8 @@ def find_reference_image(request):
     query = str(request.get('query', ''))[:300]
     # The model only needs the application-owned reference directory. Never let
     # a tool argument turn this downloader into an arbitrary file writer.
-    # Kurulum kokunu ortam degiskeninden oku (bkz. _root.py); paket site-packages'te
-    # olabilecegi icin kendi konumundan turetmek yanlis olur.
+    # Read the install root from the environment (see _root.py); the package may
+    # live in site-packages, so deriving it from the file location would be wrong.
     from _root import install_root
 
     root = str(install_root())
@@ -192,11 +191,11 @@ def find_reference_image(request):
     os.makedirs(out_dir, exist_ok=True)
 
     try:
-        # Gorsel aramasi da search_web ile ayni sekilde acik timeout almali;
-        # aksi halde ddgs varsayilanina bagli kalip isi uzun sure bekletir.
+        # The image search must have an explicit timeout like search_web; otherwise
+        # it is stuck with the ddgs default and keeps the job waiting for a long time.
         results = list(DDGS(timeout=15).images(query, max_results=8))
     except Exception as exc:
-        return json.dumps({'error': 'gorsel aramasi basarisiz: %s' % exc}, ensure_ascii=False)
+        return json.dumps({'error': 'image search failed: %s' % exc}, ensure_ascii=False)
 
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) MamidLabs/1.0'}
     for item in results:
@@ -225,7 +224,7 @@ def find_reference_image(request):
                 img.verify()
             with Image.open(path) as img:
                 if img.width * img.height > MAX_REFERENCE_PIXELS:
-                    raise ValueError('Gorsel piksel sinirini asti.')
+                    raise ValueError('The image exceeded the pixel limit.')
                 width, height = img.size
                 if width < 256 or height < 256:
                     os.remove(path)
@@ -247,7 +246,7 @@ def find_reference_image(request):
             'source': item.get('url') or url, 'title': item.get('title', ''),
         }, ensure_ascii=False)
 
-    return json.dumps({'error': 'uygun gorsel bulunamadi'}, ensure_ascii=False)
+    return json.dumps({'error': 'no suitable image found'}, ensure_ascii=False)
 
 
 def main():

@@ -2,7 +2,7 @@
 
 The interface language is process-global (:mod:`mamidlabs.core.i18n`), so a test
 that switches it must not leak into the next one; the autouse fixture below
-resets it to the source language before and after every test.
+resets it to the default language before and after every test.
 """
 
 import pathlib

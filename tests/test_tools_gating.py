@@ -37,6 +37,14 @@ def test_production_tools_need_intent(tmp_path):
     assert "create_document" not in plain
     assert "generate_image" not in plain
     assert "generate_chart" not in plain
+    assert "create_document" in _names(reg, chips={"internet": True}, message="write a report")
+    assert "generate_image" in _names(reg, chips={"internet": True}, message="draw a cat picture")
+    assert "generate_chart" in _names(reg, chips={"internet": True}, message="draw a bar chart")
+
+
+def test_turkish_intent_keywords_still_match(tmp_path):
+    """Both languages are accepted: a Turkish request must keep gating the same way."""
+    reg = _registry(tmp_path)
     assert "create_document" in _names(reg, chips={"internet": True}, message="bir rapor oluştur")
     assert "generate_image" in _names(reg, chips={"internet": True}, message="kedi resmi çiz")
     assert "generate_chart" in _names(reg, chips={"internet": True}, message="sütun grafiği çiz")
@@ -45,7 +53,7 @@ def test_production_tools_need_intent(tmp_path):
 def test_run_command_only_on_command_intent(tmp_path):
     reg = _registry(tmp_path)
     assert "run_command" not in _names(reg, chips={"internet": True})
-    assert "run_command" in _names(reg, chips={"internet": True}, message="terminalde çalıştır")
+    assert "run_command" in _names(reg, chips={"internet": True}, message="run this in the terminal")
 
 
 def test_agent_chip_enables_ask_model_and_bound_files(tmp_path):
@@ -73,4 +81,4 @@ def test_read_document_requires_documents(tmp_path):
 def test_unknown_tool_returns_error(tmp_path):
     reg = _registry(tmp_path)
     result = reg.call("nope", {})
-    assert "bilinmeyen araç" in result
+    assert "unknown tool" in result

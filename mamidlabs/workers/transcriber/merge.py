@@ -1,13 +1,13 @@
-"""Kronolojik birlestirme (zaman damgasi YAZILMAZ). Cikti bicimi:
+"""Chronological merge (timestamps are NOT written). Output format:
 
-    (ayak sesleri yaklasıyor)
-    Konusmaci: Geldin mi?
-    (kapi kapanma sesi)
-    Konusmaci: Evet, biraz geciktim.
+    (footsteps approaching)
+    Speaker: Are you there?
+    (door closing)
+    Speaker: Yes, I was a little late.
 
-Konusma satirlari "Konusmaci" (konusmaci ayrimi varsa "Konusmaci N") ile, olaylar
-parantez icinde Turkce ifadeyle yazilir. Satirlar yalnizca KRONOLOJIK sirada dizilir;
-zaman damgasi metne eklenmez (ister `include_timestamps=True` ile acilir).
+Speech lines are written as "Speaker" (or "Speaker N" when diarisation is available) and events in
+parentheses with a readable phrase. Lines are ordered ONLY chronologically; no timestamp is added
+to the text (enabled on request with `include_timestamps=True`).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def timestamp(seconds: float) -> str:
 
 
 def _speaker_for(start: float, end: float, turns: list[dict]) -> str | None:
-    """Konusma segmentiyle en cok ortusen konusmaciyi doner."""
+    """Return the speaker with the largest overlap with the speech segment."""
     best = None
     best_overlap = 0.0
     for turn in turns or []:
@@ -34,13 +34,13 @@ def _speaker_for(start: float, end: float, turns: list[dict]) -> str | None:
 
 
 def merge(segments: list[dict], events: list[dict], turns: list[dict] | None = None,
-          speaker_prefix: str = 'Konuşmacı', include_timestamps: bool = False) -> str:
+          speaker_prefix: str = 'Speaker', include_timestamps: bool = False) -> str:
     rows: list[tuple[float, int, str, dict]] = []
     for segment in segments or []:
         rows.append((float(segment['start']), 0, 'speech', segment))
     for event in events or []:
         rows.append((float(event['start']), 1, 'event', event))
-    # Kronolojik sira: ayni anda konusma ve olay varsa once konusma.
+    # Chronological order: when speech and an event coincide, speech comes first.
     rows.sort(key=lambda row: (row[0], row[1]))
 
     lines: list[str] = []

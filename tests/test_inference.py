@@ -84,16 +84,16 @@ def _engine(tmp_path, turns, specs=(), results=None):
 # --- pure helpers ------------------------------------------------------------
 def test_build_job_messages_strips_old_images():
     history = [
-        {"role": "user", "content": [{"type": "text", "text": "birinci"},
+        {"role": "user", "content": [{"type": "text", "text": "first"},
                                      {"type": "image_url", "image_url": {"url": "x"}}]},
-        {"role": "assistant", "content": "tamam"},
-        {"role": "user", "content": [{"type": "text", "text": "ikinci"},
+        {"role": "assistant", "content": "okay"},
+        {"role": "user", "content": [{"type": "text", "text": "second"},
                                      {"type": "image_url", "image_url": {"url": "y"}}]},
     ]
     messages = build_job_messages("sys", history)
     assert messages[0]["role"] == "system"
     assert isinstance(messages[1]["content"], str)
-    assert "önceki turda" in messages[1]["content"]
+    assert "previous turn" in messages[1]["content"]
     # The last turn keeps its image.
     assert isinstance(messages[3]["content"], list)
 
@@ -146,61 +146,61 @@ def test_compact_many_tool_outputs_fits_after_marker_pass():
 
 
 def test_run_turn_no_compact_event_when_prompt_fits(tmp_path):
-    engine, stream = _engine(tmp_path, [[_text_chunk("Merhaba")]])
-    events = list(engine.run_turn([{"role": "user", "content": "selam"}]))
+    engine, stream = _engine(tmp_path, [[_text_chunk("Hello")]])
+    events = list(engine.run_turn([{"role": "user", "content": "hi"}]))
     assert [e["kind"] for e in events if e["kind"] == "compact"] == []
     assert stream.calls == 1
 
 
 def test_run_turn_overflow_forces_final_answer_and_clamps_tokens(tmp_path):
     registry = StubRegistry([Spec("search_web")], {})
-    stream = RecordingStream([[_text_chunk("Elimdeki bulgularla: ...")]])
+    stream = RecordingStream([[_text_chunk("With the findings: ...")]])
     engine = InferenceEngine(Paths(tmp_path), _settings(tmp_path), registry,
                              stream_fn=stream)
     engine.settings["contextLimit"] = 8192
     history = [{"role": "user", "content": "u" * 40000}]  # cannot be shortened
     events = list(engine.run_turn(history, max_tokens=1024))
-    assert any(e["kind"] == "status" and "bağlam" in e["text"].lower()
+    assert any(e["kind"] == "status" and "context limit" in e["text"].lower()
                for e in events)
     body = stream.bodies[0]
     assert "tools" not in body                 # tools dropped, no overflow error
     assert body["max_tokens"] == 256           # clamped to the remaining room
     note = body["messages"][-1]
-    assert note["role"] == "user" and "[Sistem notu]" in note["content"]
+    assert note["role"] == "user" and "[System note]" in note["content"]
     assert events[-1]["kind"] == "done"
     # The forced-answer note lives only in the request copy, not in history.
-    assert not any("[Sistem notu]" in str(m.get("content"))
+    assert not any("[System note]" in str(m.get("content"))
                    for m in events[-1]["data"])
 
 
 def test_strip_fabricated_citations():
-    text = "Yanıt burada.\nKaynak: https://fake.example/x\nSon satır."
+    text = "The answer is here.\nSource: https://fake.example/x\nLast line."
     out = strip_fabricated_citations(text)
     assert "https://fake.example" not in out
-    assert "Yanıt burada." in out
+    assert "The answer is here." in out
 
 
 # --- turn loop ---------------------------------------------------------------
 def test_plain_answer(tmp_path):
-    engine, _ = _engine(tmp_path, [[_text_chunk("Merhaba")]])
-    events = list(engine.run_turn([{"role": "user", "content": "selam"}]))
+    engine, _ = _engine(tmp_path, [[_text_chunk("Hello")]])
+    events = list(engine.run_turn([{"role": "user", "content": "hi"}]))
     done = events[-1]
     assert done["kind"] == "done"
-    assert done["text"] == "Merhaba"
+    assert done["text"] == "Hello"
 
 
 def test_web_failure_appends_note(tmp_path):
     engine, stream = _engine(
         tmp_path,
-        [[_tool_chunk("search_web", json.dumps({"query": "hava"}))],
-         [_text_chunk("Bilemiyorum.")]],
+        [[_tool_chunk("search_web", json.dumps({"query": "weather"}))],
+         [_text_chunk("I don't know.")]],
         specs=[Spec("search_web", "read")],
         results={"search_web": json.dumps({"error": "HTTP Error 403: Forbidden"})},
     )
-    events = list(engine.run_turn([{"role": "user", "content": "hava nasıl?"}]))
+    events = list(engine.run_turn([{"role": "user", "content": "how is the weather?"}]))
     done = events[-1]
     assert stream.calls == 2
-    assert "başarısız" in done["text"]
+    assert "failed" in done["text"]
     assert done["web"]["fail_count"] == 1
     assert done["web"]["success"] is False
 
@@ -211,26 +211,26 @@ def test_partial_web_success_has_no_note(tmp_path):
         tmp_path,
         [[_tool_chunk("search_web", json.dumps({"query": "a"}), "t1")],
          [_tool_chunk("search_web", json.dumps({"query": "b"}), "t2")],
-         [_text_chunk("18 derece.")]],
+         [_text_chunk("18 degrees.")]],
         specs=[Spec("search_web", "read")],
         results={"search_web": json.dumps({"error": "HTTP Error 403"})},
     )
     # Override results per call: first success, then failure.
     results_iter = iter([json.dumps([{"title": "ok"}]), json.dumps({"error": "HTTP Error 403"})])
     engine.registry.call = lambda name, args: next(results_iter)  # type: ignore[assignment]
-    events = list(engine.run_turn([{"role": "user", "content": "hava?"}]))
+    events = list(engine.run_turn([{"role": "user", "content": "weather?"}]))
     done = events[-1]
     assert done["web"]["success"] is True
     assert done["web"]["fail_count"] == 1
-    assert "başarısız" not in done["text"]
-    assert done["text"] == "18 derece."
+    assert "failed" not in done["text"]
+    assert done["text"] == "18 degrees."
 
 
 def test_write_tool_requires_approval_and_denial_is_recorded(tmp_path):
     engine, _ = _engine(
         tmp_path,
         [[_tool_chunk("write_bound_file", json.dumps({"relative_path": "a.txt", "content": "x"}))],
-         [_text_chunk("Yazmadım.")]],
+         [_text_chunk("I didn't write it.")]],
         specs=[Spec("write_bound_file", "write")],
     )
     calls = []
@@ -239,7 +239,7 @@ def test_write_tool_requires_approval_and_denial_is_recorded(tmp_path):
         calls.append(name)
         return False
 
-    events = list(engine.run_turn([{"role": "user", "content": "dosya yaz"}], approve=deny))
+    events = list(engine.run_turn([{"role": "user", "content": "write a file"}], approve=deny))
     assert any(e["kind"] == "denied" for e in events)
     assert calls == ["write_bound_file"]
 

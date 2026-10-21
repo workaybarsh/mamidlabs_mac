@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-# Kurulum kokunu ortam degiskeninden oku (bkz. _root.py).
+# Read the install root from the environment (see _root.py).
 from _root import install_root
 
 CACHE_ROOT = str(install_root() / "tools" / "paddle-cache")
@@ -30,7 +30,7 @@ MAX_RENDER_PIXELS = 40_000_000
 def _validate_input(path: str, limit: int, label: str) -> None:
     size = Path(path).stat().st_size
     if size > limit:
-        raise ValueError(f"{label} boyutu guvenlik sinirini asti.")
+        raise ValueError(f"{label} size exceeded the safety limit.")
 
 
 def _configure_cache() -> None:
@@ -196,10 +196,10 @@ def _ocr_response(pairs: list[tuple[str, float]], **extra: Any) -> dict[str, Any
 def ocr_image(request: dict[str, Any]) -> dict[str, Any]:
     path = str(request.get("path") or "")
     if not path:
-        return {"error": "OCR icin dosya yolu gerekli."}
+        return {"error": "A file path is required for OCR."}
     if not Path(path).is_file():
-        return {"error": f"Gorsel bulunamadi: {path}"}
-    _validate_input(path, MAX_IMAGE_FILE_BYTES, "Gorsel")
+        return {"error": f"Image not found: {path}"}
+    _validate_input(path, MAX_IMAGE_FILE_BYTES, "Image")
 
     gpu_engine = _new_engine("gpu")
     gpu_pairs = _extract_pairs(_run_ocr(gpu_engine, path))
@@ -213,7 +213,7 @@ def ocr_images(request: dict[str, Any]) -> dict[str, Any]:
         requested_paths = [requested_paths]
     paths = [str(path) for path in requested_paths if str(path)]
     if not paths:
-        return {"error": "Coklu OCR icin en az bir gorsel yolu gerekli."}
+        return {"error": "At least one image path is required for batch OCR."}
 
     engine = None
     results: list[dict[str, Any]] = []
@@ -221,8 +221,8 @@ def ocr_images(request: dict[str, Any]) -> dict[str, Any]:
         item: dict[str, Any] = {"index": index, "path": path}
         try:
             if not Path(path).is_file():
-                raise FileNotFoundError(f"Gorsel bulunamadi: {path}")
-            _validate_input(path, MAX_IMAGE_FILE_BYTES, "Gorsel")
+                raise FileNotFoundError(f"Image not found: {path}")
+            _validate_input(path, MAX_IMAGE_FILE_BYTES, "Image")
             if engine is None:
                 engine = _new_engine("gpu")
             item.update(_ocr_response(_extract_pairs(_run_ocr(engine, path)), engine="paddleocr-gpu"))
@@ -234,7 +234,7 @@ def ocr_images(request: dict[str, Any]) -> dict[str, Any]:
     text_parts = []
     for item in results:
         if item.get("text"):
-            text_parts.append(f"[Gorsel {item['index']}]\n{item['text']}")
+            text_parts.append(f"[Image {item['index']}]\n{item['text']}")
     combined_text = "\n\n".join(text_parts)
     successful = sum(1 for item in results if item.get("text"))
     confidence_values = [float(item["confidence"]) for item in results if item.get("text")]
@@ -256,9 +256,9 @@ def ocr_pdf(request: dict[str, Any]) -> dict[str, Any]:
     """OCR a scanned/near-empty PDF, preferring PaddleOCR's native PDF input."""
     path = str(request.get("path") or "")
     if not path:
-        return {"error": "PDF OCR icin dosya yolu gerekli."}
+        return {"error": "A file path is required for PDF OCR."}
     if not Path(path).is_file():
-        return {"error": f"PDF bulunamadi: {path}"}
+        return {"error": f"PDF not found: {path}"}
     _validate_input(path, MAX_PDF_FILE_BYTES, "PDF")
 
     # PDF OCR deliberately stays on the existing CPU path. It handles native
@@ -278,7 +278,7 @@ def ocr_pdf(request: dict[str, Any]) -> dict[str, Any]:
         import fitz
     except ImportError as exc:
         detail = f"{type(direct_error).__name__}: {direct_error}" if direct_error else str(exc)
-        return {"error": f"PDF OCR icin PyMuPDF eksik: {detail}"}
+        return {"error": f"PyMuPDF is missing for PDF OCR: {detail}"}
 
     max_pages = max(1, min(int(request.get("max_pages", 50)), 100))
     pairs = []
@@ -289,13 +289,13 @@ def ocr_pdf(request: dict[str, Any]) -> dict[str, Any]:
                 page = document.load_page(index)
                 estimated_pixels = int(page.rect.width * 2) * int(page.rect.height * 2)
                 if estimated_pixels > MAX_RENDER_PIXELS:
-                    raise ValueError("PDF sayfasi piksel sinirini asti.")
+                    raise ValueError("A PDF page exceeded the pixel limit.")
                 pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
                 page_path = os.path.join(temp_dir, f"page-{index + 1}.png")
                 pixmap.save(page_path)
                 pairs.extend(_extract_pairs(_run_ocr(engine, page_path)))
     except Exception as exc:
-        return {"error": f"PDF OCR basarisiz: {type(exc).__name__}: {exc}"}
+        return {"error": f"PDF OCR failed: {type(exc).__name__}: {exc}"}
     return _ocr_response(pairs, page_count=page_count)
 
 
@@ -313,7 +313,7 @@ def _configure_stdout() -> None:
     if hasattr(sys.stdin, "reconfigure"):
         # PowerShell writes request JSON as UTF-8. Without this explicit
         # setting, a Windows pipe can be decoded with the active ANSI code
-        # page, turning paths such as ``görüntüsü`` into ``gÃ¶rÃ¼ntÃ¼sÃ¼``.
+        # page, turning paths such as ``résumé.pdf`` into ``rÃ©sumÃ©.pdf``.
         sys.stdin.reconfigure(encoding="utf-8", errors="strict")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
@@ -325,7 +325,7 @@ def main() -> None:
         request = json.loads(sys.stdin.read() or "{}")
         handler = ACTIONS.get(request.get("action"))
         if not handler:
-            response = {"error": f"Bilinmeyen OCR islemi: {request.get('action')}"}
+            response = {"error": f"Unknown OCR action: {request.get('action')}"}
         else:
             response = handler(request)
     except Exception as exc:  # The worker must never crash the PowerShell job.

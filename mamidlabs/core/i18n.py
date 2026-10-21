@@ -1,17 +1,17 @@
-"""Runtime localisation (TR/ENG) for the unified macOS edition.
+"""Runtime localisation (EN/TR) for the unified macOS edition.
 
 The Windows edition was once two separate repositories (``MamidLabsTR`` and
 ``MamidLabsENG``) that differed only by hardcoded strings and a handful of
 localised identifiers. The unified edition keeps **one** codebase and moves every
 user-facing string into JSON catalogs under ``mamidlabs/locales``:
 
-    mamidlabs/locales/tr.json
     mamidlabs/locales/en.json
+    mamidlabs/locales/tr.json
 
 Rules that keep this honest:
 
-* Turkish is the source language. A missing key in ``en.json`` falls back to the
-  Turkish string, then to the key itself, so the UI can never render an empty
+* English is the default language. A missing key in ``tr.json`` falls back to the
+  English string, then to the key itself, so the UI can never render an empty
   label.
 * ``set_language`` is process-global (the app has a single UI language) and is
   what the installer/wizard writes into ``settings/api.json:language``.
@@ -26,11 +26,11 @@ import os
 import sys
 from pathlib import Path
 
-#: Languages the unified edition ships. ``tr`` is the default (source) language.
-SUPPORTED = ("tr", "en")
+#: Languages the unified edition ships. ``en`` is the default language.
+SUPPORTED = ("en", "tr")
 
 #: Language used when nothing else is configured.
-DEFAULT_LANGUAGE = "tr"
+DEFAULT_LANGUAGE = "en"
 
 #: ``mamidlabs/locales`` sits next to the ``core`` package.
 LOCALES_DIR = Path(__file__).resolve().parent.parent / "locales"
@@ -107,7 +107,7 @@ def configure_console() -> None:
 
     macOS terminals are UTF-8, but when the output is **redirected** (a pipe, a
     file, the installer's log) the stream can fall back to an ASCII/locale codec
-    and printing a Turkish character raises :class:`UnicodeEncodeError`.
+    and printing a non-ASCII character raises :class:`UnicodeEncodeError`.
     Reconfiguring the streams to UTF-8 (with ``replace`` as a last resort) keeps
     the CLI, ``doctor`` and the installer logs readable instead of crashing.
     """
@@ -119,7 +119,7 @@ def configure_console() -> None:
 
 
 def t(key: str, **fmt: object) -> str:
-    """Translate ``key``; unknown keys fall back to Turkish, then to the key.
+    """Translate ``key``; unknown keys fall back to English, then to the key.
 
     ``fmt`` values are substituted with :meth:`str.format` so catalogs can use
     ``{name}`` placeholders.

@@ -184,4 +184,4 @@ def test_memory_error_message_mentions_unified_memory_on_macos(tmp_path, monkeyp
     model = _fake_gguf(tmp_path / "m.gguf", b"\x00" * (10 * 1024 * 1024))
     with pytest.raises(MemoryError_) as excinfo:
         memory_budget(model, "max", None, free_mib=9)
-    assert "birleşik bellek" in str(excinfo.value)
+    assert "unified memory" in str(excinfo.value)

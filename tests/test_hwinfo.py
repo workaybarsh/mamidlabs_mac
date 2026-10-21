@@ -11,7 +11,7 @@ def test_mib_from_bytes():
     assert hwinfo.mib_from_bytes(17179869184) == 16384
     assert hwinfo.mib_from_bytes("68719476736") == 65536
     assert hwinfo.mib_from_bytes("") == 0
-    assert hwinfo.mib_from_bytes("saçma") == 0
+    assert hwinfo.mib_from_bytes("nonsense") == 0
 
 
 @pytest.mark.parametrize("machine,flag,expected", [

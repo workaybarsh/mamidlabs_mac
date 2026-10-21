@@ -42,9 +42,9 @@ def _eval_node(node: ast.AST, x: float) -> float:
             return x
         value = ALLOWED_NAMES.get(node.id)
         if callable(value):
-            raise ValueError(f"'{node.id}' bir fonksiyon; parantezle çağır.")
+            raise ValueError(f"'{node.id}' is a function; call it with parentheses.")
         if value is None:
-            raise ValueError(f"bilinmeyen ad: {node.id}")
+            raise ValueError(f"unknown name: {node.id}")
         return float(value)
     if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
         return _BIN_OPS[type(node.op)](_eval_node(node.left, x), _eval_node(node.right, x))
@@ -52,13 +52,13 @@ def _eval_node(node: ast.AST, x: float) -> float:
         return _UNARY_OPS[type(node.op)](_eval_node(node.operand, x))
     if isinstance(node, ast.Call):
         if not isinstance(node.func, ast.Name) or node.func.id not in ALLOWED_NAMES:
-            raise ValueError("yalnızca izin verilen fonksiyonlar kullanılabilir.")
+            raise ValueError("only allowed functions may be used.")
         fn = ALLOWED_NAMES[node.func.id]
         if not callable(fn):
-            raise ValueError(f"'{node.func.id}' çağrılabilir değil.")
+            raise ValueError(f"'{node.func.id}' is not callable.")
         args = [_eval_node(a, x) for a in node.args]
         return float(fn(*args))
-    raise ValueError("ifadede izin verilmeyen bir yapı var.")
+    raise ValueError("the expression contains a construct that is not allowed.")
 
 
 def evaluate_expression(expression: str, x: float) -> float:
@@ -85,7 +85,7 @@ def generate_chart(paths: Paths, request: dict) -> dict:
     labels = request.get("labels") or []
     values = request.get("values") or []
     if kind in ("bar", "line", "pie", "scatter") and not values:
-        return {"error": "grafik için 'values' gerekli."}
+        return {"error": "'values' is required for a chart."}
 
     if kind == "bar":
         ax.bar([str(x) for x in labels] or range(len(values)), values)
@@ -106,7 +106,7 @@ def generate_chart(paths: Paths, request: dict) -> dict:
     elif kind == "function":
         expression = str(request.get("expression") or "")
         if not expression:
-            return {"error": "fonksiyon grafiği için 'expression' gerekli."}
+            return {"error": "'expression' is required for a function chart."}
         x_min = float(request.get("x_min", -10))
         x_max = float(request.get("x_max", 10))
         samples = int(request.get("samples", 400))
@@ -117,13 +117,13 @@ def generate_chart(paths: Paths, request: dict) -> dict:
                 xs.append(xv)
                 ys.append(evaluate_expression(expression, xv))
         except (ValueError, SyntaxError, ZeroDivisionError, OverflowError) as exc:
-            return {"error": f"ifade değerlendirilemedi: {exc}"}
+            return {"error": f"the expression could not be evaluated: {exc}"}
         ax.plot(xs, ys)
         ax.axhline(0, color="black", linewidth=0.5)
         ax.axvline(0, color="black", linewidth=0.5)
         ax.set_xlabel("x")
     else:
-        return {"error": f"bilinmeyen grafik türü: {kind}"}
+        return {"error": f"unknown chart type: {kind}"}
 
     if title:
         ax.set_title(title)

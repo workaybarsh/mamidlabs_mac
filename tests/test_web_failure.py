@@ -44,7 +44,7 @@ def test_tracker_mixed_success_is_not_unavailable():
     assert tracker.unavailable is False
     assert tracker.should_lock_tools is False
     # The visible note must not be appended when a call succeeded.
-    assert tracker.add_failure_note("Bugün Zonguldak 18°C.") == "Bugün Zonguldak 18°C."
+    assert tracker.add_failure_note("Today Zonguldak is 18°C.") == "Today Zonguldak is 18°C."
 
 
 def test_tracker_all_failed_is_unavailable():
@@ -53,8 +53,8 @@ def test_tracker_all_failed_is_unavailable():
     tracker.record({"error": "timed out"})
     assert tracker.unavailable is True
     assert tracker.should_lock_tools is True
-    note = tracker.add_failure_note("Yanıt.")
-    assert "başarısız" in note
+    note = tracker.add_failure_note("Answer.")
+    assert "failed" in note
 
 
 def test_tracker_single_failure_locks_only_after_two():
@@ -69,4 +69,4 @@ def test_tracker_success_after_failure_clears_unavailable():
     tracker.record({"error": "HTTP Error 403"})
     tracker.record([{"title": "ok"}])
     assert tracker.unavailable is False
-    assert tracker.add_failure_note("metin") == "metin"
+    assert tracker.add_failure_note("text") == "text"

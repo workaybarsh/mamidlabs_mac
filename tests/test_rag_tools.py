@@ -34,61 +34,61 @@ def _corpus(tmp_path: pathlib.Path) -> pathlib.Path:
     # file would itself be indexed and change the signature on every run.
     root = tmp_path / "corpus"
     (root / "docs").mkdir(parents=True)
-    (root / "docs" / "notlar.txt").write_text(
-        "Elma ve armut meyvedir.\n"
-        "Armut özellikle sulu olur.\n"
-        "Kayısı da bir meyvedir.\n", encoding="utf-8")
+    (root / "docs" / "notes.txt").write_text(
+        "Apple and pear are fruit.\n"
+        "The pear is especially juicy.\n"
+        "Apricot is also a fruit.\n", encoding="utf-8")
     (root / "src").mkdir()
     (root / "src" / "app.py").write_text(
-        "def elma_isle():\n    return 'armutlu kod'\n", encoding="utf-8")
+        "def process_apple():\n    return 'pear code'\n", encoding="utf-8")
     # Skipped: dependency folder.
     (root / "node_modules" / "pkg").mkdir(parents=True)
     (root / "node_modules" / "pkg" / "index.js").write_text(
-        "karpuzgizli kelimesi sadece burada\n", encoding="utf-8")
+        "watermelonsecret word only here\n", encoding="utf-8")
     # Skipped: binary content in a text extension.
     (root / "bin").mkdir()
-    (root / "bin" / "fake.txt").write_bytes(b"\x00\x01\x02kavun\x00")
+    (root / "bin" / "fake.txt").write_bytes(b"\x00\x01\x02melon\x00")
     return root
 
 
 def test_search_finds_chunk_with_path_and_line(tmp_path):
     root = _corpus(tmp_path)
     store = tmp_path / "rag" / "bound-abc.json"
-    result = _call({"action": "search", "root": str(root), "query": "armut",
+    result = _call({"action": "search", "root": str(root), "query": "juicy",
                     "top": 5, "store": str(store)}, tmp_path)
     assert result["hits"], result
     top = result["hits"][0]
-    assert top["path"] == "docs/notlar.txt"
+    assert top["path"] == "docs/notes.txt"
     assert top["line"] >= 1
-    assert "armut" in top["text"].lower()
+    assert "juicy" in top["text"].lower()
     assert store.is_file()
 
 
 def test_search_skips_dependency_folders(tmp_path):
     root = _corpus(tmp_path)
-    result = _call({"action": "search", "root": str(root), "query": "karpuzgizli"},
+    result = _call({"action": "search", "root": str(root), "query": "watermelonsecret"},
                    tmp_path)
     assert result["hits"] == []
 
 
 def test_search_skips_binary_files(tmp_path):
     root = _corpus(tmp_path)
-    result = _call({"action": "search", "root": str(root), "query": "kavun"}, tmp_path)
+    result = _call({"action": "search", "root": str(root), "query": "melon"}, tmp_path)
     assert result["hits"] == []
 
 
 def test_index_is_reused_until_files_change(tmp_path):
     root = _corpus(tmp_path)
     store = tmp_path / "rag" / "bound-abc.json"
-    first = _call({"action": "search", "root": str(root), "query": "elma",
+    first = _call({"action": "search", "root": str(root), "query": "apple",
                    "store": str(store)}, tmp_path)
     assert first["cached"] is False
-    second = _call({"action": "search", "root": str(root), "query": "elma",
+    second = _call({"action": "search", "root": str(root), "query": "apple",
                     "store": str(store)}, tmp_path)
     assert second["cached"] is True
     # A new file invalidates the signature and rebuilds the index.
-    (root / "docs" / "yeni.txt").write_text("elma taze bilgi\n", encoding="utf-8")
-    third = _call({"action": "search", "root": str(root), "query": "elma",
+    (root / "docs" / "fresh.txt").write_text("apple fresh info\n", encoding="utf-8")
+    third = _call({"action": "search", "root": str(root), "query": "apple",
                    "store": str(store)}, tmp_path)
     assert third["cached"] is False
 
@@ -102,7 +102,7 @@ def test_index_action_reports_counts(tmp_path):
 
 
 def test_missing_root_is_a_clean_error(tmp_path):
-    result = _call({"action": "search", "root": str(tmp_path / "yok"),
+    result = _call({"action": "search", "root": str(tmp_path / "missing"),
                     "query": "x"}, tmp_path)
     assert "error" in result
 
@@ -136,13 +136,13 @@ def test_search_folder_requires_agent_chip(tmp_path):
 def test_search_folder_hidden_on_audio_turn(tmp_path):
     reg = _registry(tmp_path)
     assert "search_folder" not in _names(reg, chips={"agent": True}, has_audio=True,
-                                        message="bu sesi özetle")
+                                        message="summarise this audio")
 
 
 def test_search_folder_shown_on_audio_turn_with_file_intent(tmp_path):
     reg = _registry(tmp_path)
     names = _names(reg, chips={"agent": True}, has_audio=True,
-                   message="ses dosyasını klasörde ara")
+                   message="search the folder for the audio file")
     assert "search_folder" in names
 
 

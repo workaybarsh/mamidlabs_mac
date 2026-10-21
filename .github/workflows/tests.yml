@@ -1,4 +1,4 @@
-name: testler
+name: tests
 
 on:
   push:
@@ -23,17 +23,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Bağımlılıkları kur
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install pytest==9.1.1
           python -m pip install requests pillow huggingface_hub ddgs pypdf \
             reportlab python-docx python-pptx openpyxl rarfile matplotlib
 
-      - name: Paketi kur (GUI olmadan)
+      - name: Install the package (without the GUI)
         run: python -m pip install --no-deps -e .
 
-      - name: Sözdizimi denetimi
+      - name: Syntax check
         run: |
           python -m compileall -q mamidlabs
           bash -n scripts/install-mamidlabs.sh
@@ -47,7 +47,7 @@ jobs:
         run: python -m pytest -q
 
   gui:
-    name: Arayüz testleri (başsız)
+    name: Interface tests (headless)
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -63,27 +63,27 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Bağımlılıkları ve PySide6'yı kur
+      - name: Install dependencies and PySide6
         run: |
           python -m pip install --upgrade pip
           python -m pip install pytest==9.1.1 PySide6
           python -m pip install requests pillow huggingface_hub ddgs pypdf \
             reportlab python-docx python-pptx openpyxl rarfile matplotlib
 
-      - name: Paketi kur
+      - name: Install the package
         run: python -m pip install --no-deps -e .
 
-      - name: Sihirbaz ve arayüz testleri (başsız)
+      - name: Wizard and interface tests (headless)
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest tests/test_wizard_gui.py -q
 
-      - name: Sihirbaz smoke testi (başsız)
+      - name: Wizard smoke test (headless)
         env:
           QT_QPA_PLATFORM: offscreen
           MAMIDLABS_ROOT: ${{ runner.temp }}/mamidlabs
         run: |
           python -c "from PySide6.QtWidgets import QApplication; \
             from mamidlabs.wizard.setup import SetupWizard; \
-            app = QApplication([]); wizard = SetupWizard(language='tr'); \
-            print('Sihirbaz smoke OK:', wizard.windowTitle(), len(wizard.pages), 'sayfa')"
+            app = QApplication([]); wizard = SetupWizard(language='en'); \
+            print('Wizard smoke OK:', wizard.windowTitle(), len(wizard.pages), 'pages')"

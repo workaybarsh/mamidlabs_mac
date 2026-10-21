@@ -24,7 +24,7 @@ try:  # pragma: no cover - the guard is what matters
     from mamidlabs.wizard.setup import (ID_API, ID_COMPONENTS, ID_INSTALL, ID_LANG,
                                         ID_OWN, ID_PROFILE, ID_READY, SetupWizard)
 except ImportError as exc:  # pragma: no cover - missing system Qt libraries
-    pytest.skip(f"Qt yüklenemedi: {exc}", allow_module_level=True)
+    pytest.skip(f"Qt could not be loaded: {exc}", allow_module_level=True)
 
 
 @pytest.fixture(scope="module")
@@ -74,7 +74,7 @@ def test_language_switch_is_persisted(qapp, tmp_path):
 
 
 def test_profile_page_prefills_the_recommendation(qapp, tmp_path):
-    """macOS önerisi birleşik belleğe ve Apple Silicon'a bakar."""
+    """The macOS recommendation looks at unified memory and Apple Silicon."""
     from mamidlabs.core import hwinfo
 
     window = _wizard(tmp_path)
@@ -136,7 +136,7 @@ def test_install_page_reads_a_progress_file(qapp, tmp_path):
         (logs / "kurulum-adim.txt").write_text("3\n7\npython\n", encoding="utf-8")
         window.read_progress()
         assert window.progress == (3, 7, "python")
-        (logs / "kurulum-adim.txt").write_text("cevap\n", encoding="utf-8")
+        (logs / "kurulum-adim.txt").write_text("garbage\n", encoding="utf-8")
         window.read_progress()
         assert window.progress == (0, 0, "")
     finally:

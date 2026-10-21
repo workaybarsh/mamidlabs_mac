@@ -51,13 +51,13 @@ def system_prompt() -> str:
     """The fixed system prompt in the current interface language.
 
     The prompt is deliberately stable within a turn (KV-cache prefix); it only
-    changes when the user switches the interface language. Turkish is the source
-    text; English comes from ``locales/en.json``.
+    changes when the user switches the interface language. English is the source
+    text; Turkish comes from ``locales/tr.json``.
     """
     return i18n.t("prompt.system") + "\n" + i18n.t("prompt.untrusted")
 
 
-#: Turkish source prompt, kept for reference; ``run_turn`` resolves the live
+#: English source prompt, kept for reference; ``run_turn`` resolves the live
 #: value from the catalog so the language can change at runtime.
 SYSTEM_PROMPT = system_prompt()
 
@@ -155,7 +155,7 @@ _FABRICATED_CITATION_RE = re.compile(
 
 
 def strip_fabricated_citations(text: str) -> str:
-    """Drop bare 'Kaynak: <url>' lines that appear when the web failed."""
+    """Drop bare 'Source: <url>' lines that appear when the web failed."""
     if not text:
         return text
     return _FABRICATED_CITATION_RE.sub("", text).strip()
@@ -392,7 +392,7 @@ class InferenceEngine:
                 output = ""
                 if spec and spec.kind in ("write", "exec"):
                     if name in denied:
-                        output = json.dumps({"error": "kullanıcı bu aracı reddetti."},
+                        output = json.dumps({"error": "the user denied this tool."},
                                             ensure_ascii=False)
                         yield {"kind": "denied", "tool": name}
                         run_tool = False
@@ -402,7 +402,7 @@ class InferenceEngine:
                                   if untrusted_read and name in GUARDED_TOOLS else "")
                         if approve and not approve(name, arguments, reason):
                             denied.add(name)
-                            output = json.dumps({"error": "kullanıcı bu aracı reddetti."},
+                            output = json.dumps({"error": "the user denied this tool."},
                                                 ensure_ascii=False)
                             yield {"kind": "denied", "tool": name}
                             run_tool = False
@@ -414,8 +414,8 @@ class InferenceEngine:
                     web.record(output)
                     if web.should_lock_tools:
                         messages.append({"role": "system",
-                                         "content": "[Sistem notu] Web erişimi kurulamadı; "
-                                                    "web araçlarını kullanmayı bırak."})
+                                         "content": "[System note] Web access could not be "
+                                                    "established; stop using the web tools."})
                 # Untrusted sources: the model must treat the result as DATA, so
                 # the content is clearly labelled and any file write/command this
                 # turn then asks for approval (prompt-injection defence).
@@ -427,8 +427,8 @@ class InferenceEngine:
                 messages.append({"role": "tool", "tool_call_id": call.get("id", ""),
                                  "name": name, "content": output})
             if web.unavailable:
-                yield {"kind": "status", "text": "Web erişimi kurulamadı; eldeki bilgilerle "
-                                                 "devam ediliyor."}
+                yield {"kind": "status", "text": "Web access could not be established; "
+                                                 "continuing with the available information."}
 
         text = final_text
         if web.unavailable:

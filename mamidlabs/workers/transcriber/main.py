@@ -1,14 +1,15 @@
-"""Hatti calistirir: audio -> vad/asr + events -> diarize -> merge -> txt + json.
+"""Run the pipeline: audio -> vad/asr + events -> diarize -> merge -> txt + json.
 
-Iki kullanim:
-    python -m transcriber.main <ses_dosyasi> [--json cikti.json] [--timestamps]
+Two uses:
+    python -m transcriber.main <audio_file> [--json output.json] [--timestamps]
     echo '{"action":"transcribe","path":"...","device":"auto"}' | python -m transcriber.main --stdin
 
-`device='auto'` ise cihaz (cuda/cpu) kaydin suresine gore secilir (bkz. config.choose_device).
+With `device='auto'` the device (cuda/cpu) is chosen from the recording duration (see config.choose_device).
 
-LITE (eski ad PC1) profilinde modeller SIRAYLA yuklenir ve aralarinda bellek bosaltilir; PRO
-(MAX/FLASH; eski ad PC2) profilinde ayni anda kalabilir. Fark yalnizca config profilindedir; secili
-profil adi arayuzden `profile` alaniyla gecilir (bkz. config.select_profile_for).
+In the LITE (old name PC1) profile the models are loaded ONE AFTER ANOTHER and the memory is freed
+in between; in the PRO (MAX/FLASH; old name PC2) profile they can stay in memory at the same time.
+The only difference is in the config profile; the selected profile name is passed from the UI in
+the `profile` field (see config.select_profile_for).
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ def run(path: str, profile=None, device: str = 'cuda', initial_prompt: str | Non
         out_base: str | None = None, keep_wav: bool = False,
         need_swap: bool | None = None) -> dict:
     if not path or not os.path.isfile(path):
-        raise ValueError('Ses dosyasi bulunamadi: %s' % path)
+        raise ValueError('Audio file not found: %s' % path)
     profile = profile or config.select_profile()
     sequential = (profile.load_mode == 'sequential')
     want_events = profile.events if events is None else bool(events)
@@ -40,17 +41,17 @@ def run(path: str, profile=None, device: str = 'cuda', initial_prompt: str | Non
     except Exception:
         pass
 
-    # --- Cihaz secimi (device='auto') --------------------------------------
-    # Karar TUM kaydin suresine gore verilir; parcali (chunk) dökumde de ayni cihaz
-    # kullanilir ki parcalar arasinda cihaz degismesin.
+    # --- Device selection (device='auto') ----------------------------------
+    # The decision is based on the DURATION of the WHOLE recording; the same device is used for
+    # chunked transcription so the device does not change between chunks.
     device = str(device or 'auto').lower()
     if config.IS_MACOS:
         # No CUDA on macOS: CTranslate2/Whisper run on the CPU, no swap needed.
         device = 'cpu'
     elif device == 'auto':
         if profile.auto_device:
-            # need_swap acikca verilmediyse swap gerektigini varsay (guvenli taraf);
-            # load_mode'dan TAHMIN etme.
+            # If need_swap was not given explicitly, assume a swap is needed (the safe side);
+            # do not GUESS from load_mode.
             use_swap = True if need_swap is None else bool(need_swap)
             device = config.choose_device(duration, profile, use_swap)
         else:
@@ -58,7 +59,7 @@ def run(path: str, profile=None, device: str = 'cuda', initial_prompt: str | Non
 
     chunks = audio.split_wav(wav, profile.chunk_minutes)
 
-    # --- Konusma (Whisper) -------------------------------------------------
+    # --- Speech (Whisper) --------------------------------------------------
     segments: list[dict] = []
     for chunk_path, offset in chunks:
         result = asr.transcribe(chunk_path, profile, device=device,
@@ -69,7 +70,7 @@ def run(path: str, profile=None, device: str = 'cuda', initial_prompt: str | Non
     if sequential:
         asr.unload_model()
 
-    # --- Ses olaylari (AST) ------------------------------------------------
+    # --- Sound events (AST) ------------------------------------------------
     event_rows: list[dict] = []
     if want_events:
         for chunk_path, offset in chunks:
@@ -77,7 +78,7 @@ def run(path: str, profile=None, device: str = 'cuda', initial_prompt: str | Non
         if sequential:
             events_mod.unload_events_model()
 
-    # --- Konusmaci ayrimi (pyannote) --------------------------------------
+    # --- Speaker diarisation (pyannote) ------------------------------------
     turns: list[dict] = []
     if want_diarize:
         turns = diarize.diarize(wav, token=token, device=device)
@@ -101,7 +102,7 @@ def run(path: str, profile=None, device: str = 'cuda', initial_prompt: str | Non
         'speakers': turns,
     }
 
-    # --- Cikti dosyalari ---------------------------------------------------
+    # --- Output files ------------------------------------------------------
     base = out_base or os.path.splitext(path)[0]
     with open(base + '.txt', 'w', encoding='utf-8') as fh:
         fh.write(text)
@@ -110,7 +111,7 @@ def run(path: str, profile=None, device: str = 'cuda', initial_prompt: str | Non
     payload['txt_path'] = base + '.txt'
     payload['json_path'] = base + '.json'
 
-    # --- Gecici dosya temizligi -------------------------------------------
+    # --- Temporary file cleanup -------------------------------------------
     if not keep_wav:
         for chunk_path, _ in chunks:
             if chunk_path != path and chunk_path != wav:
@@ -127,12 +128,12 @@ def run(path: str, profile=None, device: str = 'cuda', initial_prompt: str | Non
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description='Yerel konusma + ses olayi dökumu')
-    parser.add_argument('path', nargs='?', help='ses/video dosyasi')
-    parser.add_argument('--stdin', action='store_true', help='JSON istegi stdin\'den oku')
+    parser = argparse.ArgumentParser(description='Local speech + sound event transcription')
+    parser.add_argument('path', nargs='?', help='audio/video file')
+    parser.add_argument('--stdin', action='store_true', help='read the JSON request from stdin')
     parser.add_argument('--device', default='auto', choices=['auto', 'cuda', 'cpu'])
     parser.add_argument('--profile', default=None, choices=['lite', 'pro', 'pc1', 'pc2', 'max', 'flash'])
-    parser.add_argument('--prompt', default=None, help='initial_prompt (ozel isim/terim)')
+    parser.add_argument('--prompt', default=None, help='initial_prompt (proper names/terms)')
     parser.add_argument('--no-events', action='store_true')
     parser.add_argument('--no-diarize', action='store_true')
     parser.add_argument('--timestamps', action='store_true')
@@ -143,7 +144,7 @@ def main(argv=None) -> int:
     if args.stdin:
         request = json.loads(sys.stdin.read() or '{}')
         if request.get('action') not in (None, 'transcribe'):
-            print(json.dumps({'error': 'bilinmeyen islem'}))
+            print(json.dumps({'error': 'unknown action'}))
             return 0
         profile = None
         if request.get('profile'):
@@ -171,7 +172,7 @@ def main(argv=None) -> int:
         return 0
 
     if not args.path:
-        parser.error('ses dosyasi gerekli')
+        parser.error('an audio file is required')
     profile = None
     if args.profile:
         profile = config.select_profile_for(args.profile)

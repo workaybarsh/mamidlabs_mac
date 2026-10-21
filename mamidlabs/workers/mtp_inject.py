@@ -1,15 +1,15 @@
-"""Qwen3.5 MTP (Multi-Token Prediction) basligini GGUF'a enjekte eder.
+"""Injects the Qwen3.5 MTP (Multi-Token Prediction) header into a GGUF.
 
-Katalogdaki abliterated Qwen3.5 9B GGUF'u, donusturucunun MTP basligini
-disarida birakmasi nedeniyle `nextn` katmanlarindan yoksundur; bu yuzden
-llama.cpp `--spec-type draft-mtp` ile calismaz. Bu modul basligi kaynak HF
-safetensors dosyasindan (yalnizca MTP tensorleri, HTTP range ile) cekip mevcut
-GGUF'a ekler. Cikti kayipsizdir: ana model agirliklarina dokunulmaz, yalnizca
-eksik MTP blogu (blk.<N>.nextn.*) ve `nextn_predict_layers` ust verisi eklenir.
+The abliterated Qwen3.5 9B GGUF in the catalog lacks the `nextn` layers because the
+converter left the MTP header out; so llama.cpp does not work with
+`--spec-type draft-mtp`. This module pulls the header from the source HF
+safetensors file (only the MTP tensors, over HTTP range) and adds it to the existing
+GGUF. The output is lossless: the main model weights are not touched, only the
+missing MTP block (blk.<N>.nextn.*) and the `nextn_predict_layers` metadata are added.
 
-Onemli: llama.cpp GGUF'ta Qwen normalizasyon agirliklarini (w + 1) olarak
-saklar; HF kaynagi ham w tutar. Bu yuzden basliktaki tum 1-B (F32) tensorlere
-+1 uygulanir (ana modeldeki normlarla ayni sekilde).
+Important: llama.cpp stores Qwen normalisation weights as (w + 1) in GGUF; the HF
+source keeps raw w. So +1 is applied to all 1-D (F32) tensors in the header (the
+same way as the normalisation weights in the main model).
 """
 import json
 import os
@@ -24,7 +24,7 @@ SCALAR = {U8: '<B', I8: '<b', U16: '<H', I16: '<h', U32: '<I', I32: '<i',
 GGML_F32, GGML_F16 = 0, 1
 ALIGN = 32
 
-# HF tensor adi -> llama.cpp GGUF nextn tensor adi
+# HF tensor name -> llama.cpp GGUF nextn tensor name
 MAP = {
     'mtp.layers.0.input_layernorm.weight':          'blk.{b}.attn_norm.weight',
     'mtp.layers.0.post_attention_layernorm.weight': 'blk.{b}.post_attention_norm.weight',
@@ -101,11 +101,11 @@ def _align_up(x, a=ALIGN):
 
 
 def read_header(path):
-    """GGUF basligini okur; (version, meta, tensors, data_start) dondurur."""
+    """Read the GGUF header; returns (version, meta, tensors, data_start)."""
     with open(path, 'rb') as f:
         r = _R(f)
         if f.read(4) != b'GGUF':
-            raise ValueError('GGUF degil: ' + path)
+            raise ValueError('not a GGUF: ' + path)
         version = r.u32()
         n_tensors = r.u64()
         n_kv = r.u64()
@@ -127,7 +127,7 @@ def read_header(path):
 
 
 def has_mtp(path):
-    """Model zaten bir nextn/MTP blogu tasiyor mu?"""
+    """Does the model already carry a nextn/MTP block?"""
     try:
         _, meta, _, _ = read_header(path)
     except Exception:
@@ -152,7 +152,7 @@ def _http_get(url, start=None, end=None, token=None):
                 return resp.read()
         except Exception as exc:  # agdalgalanmasina karsi birkac deneme
             last = exc
-    raise RuntimeError(f'indirme basarisiz: {url} ({last})')
+    raise RuntimeError(f'download failed: {url} ({last})')
 
 
 def _fetch_safetensors_header(base_url, shard, token):
@@ -163,14 +163,14 @@ def _fetch_safetensors_header(base_url, shard, token):
 
 
 def fetch_mtp_tensors(repo, revision, token=None):
-    """Kaynak HF deposundan 15 MTP tensorunun ham bayt/dtype/bicim bilgisini ceker."""
+    """Pull the raw bytes/dtype/shape info of the 15 MTP tensors from the source HF repo."""
     rev = revision or 'main'
     base = f'https://huggingface.co/{repo}/resolve/{rev}/'
     index = json.loads(_http_get(base + 'model.safetensors.index.json', token=token).decode('utf-8'))
     weight_map = index['weight_map']
     wanted = {n: shard for n, shard in weight_map.items() if n.startswith('mtp.')}
     if len(wanted) != len(MAP):
-        raise RuntimeError(f'beklenen {len(MAP)} MTP tensoru bulundu, {len(wanted)} geldi')
+        raise RuntimeError(f'expected {len(MAP)} MTP tensors, got {len(wanted)}')
     out = {}
     for shard in sorted(set(wanted.values())):
         shard_url = base + shard
@@ -182,13 +182,13 @@ def fetch_mtp_tensors(repo, revision, token=None):
             s, e = info['data_offsets']
             raw = _http_get(shard_url, data_start + s, data_start + e - 1, token)
             if len(raw) != e - s:
-                raise RuntimeError(f'{name}: eksik veri')
+                raise RuntimeError(f'{name}: missing data')
             out[name] = {'dtype': info['dtype'], 'shape': info['shape'], 'raw': raw}
     return out
 
 
 def _to_f32_list(raw, dtype):
-    """Ham bayti F32 listesine cevirir (numpy olmadan). Yalnizca kucuk norm tensorleri icin."""
+    """Convert raw bytes into an F32 list (without numpy). Only for small norm tensors."""
     if dtype == 'F32':
         return list(struct.unpack('<%df' % (len(raw) // 4), raw))
     if dtype == 'F16':
@@ -197,14 +197,14 @@ def _to_f32_list(raw, dtype):
         n = len(raw) // 2
         u = struct.unpack('<%dH' % n, raw)
         return [struct.unpack('<f', struct.pack('<I', x << 16))[0] for x in u]
-    raise RuntimeError('desteklenmeyen dtype: ' + dtype)
+    raise RuntimeError('unsupported dtype: ' + dtype)
 
 
 _BF16_F16_LUT = None
 
 
 def _bf16_f16_lut():
-    """BF16 16-bit desenini F16 16-bit desenine esleyen 65536'lik tablo."""
+    """A 65536-entry table mapping a BF16 16-bit pattern to an F16 16-bit pattern."""
     global _BF16_F16_LUT
     if _BF16_F16_LUT is None:
         lut = array.array('H', bytes(2 * 65536))
@@ -224,7 +224,7 @@ def _bf16_f16_lut():
 
 
 def _to_f16_bytes(raw, dtype):
-    """Ham bayti GGML F16 baytina cevirir (buyuk matris tensorleri icin verimli)."""
+    """Convert raw bytes into GGML F16 bytes (efficient for large matrix tensors)."""
     if dtype == 'F16':
         return raw
     if dtype == 'BF16':
@@ -235,20 +235,20 @@ def _to_f16_bytes(raw, dtype):
     if dtype == 'F32':
         vals = struct.unpack('<%df' % (len(raw) // 4), raw)
         return struct.pack('<%de' % len(vals), *vals)
-    raise RuntimeError('desteklenmeyen dtype: ' + dtype)
+    raise RuntimeError('unsupported dtype: ' + dtype)
 
 
 def inject_into_gguf(target, tensors, emit=print):
-    """Mevcut GGUF'a MTP blogunu ekleyip yerinde gunceller."""
+    """Add the MTP block to an existing GGUF, updating it in place."""
     version, meta, base_tensors, data_start = read_header(target)
     arch = next((v for k, _t, v in meta if k == 'general.architecture'), 'qwen35')
     if arch != 'qwen35':
-        raise RuntimeError(f'beklenmeyen mimari: {arch}')
+        raise RuntimeError(f'unexpected architecture: {arch}')
     block = next((v for k, _t, v in meta if k == 'qwen35.block_count'), None)
     if not isinstance(block, int):
-        raise RuntimeError('qwen35.block_count bulunamadi')
+        raise RuntimeError('qwen35.block_count not found')
     if any(k == 'qwen35.nextn_predict_layers' for k, _t, _v in meta):
-        emit('MTP basligi zaten var, atlandi.')
+        emit('MTP header already present, skipped.')
         return
 
     for m in meta:
@@ -277,7 +277,7 @@ def inject_into_gguf(target, tensors, emit=print):
         blobs.append((off, info, gtype, nbytes))
 
     tmp = target + '.mtp-tmp'
-    emit('MTP basligi yaziliyor…')
+    emit('Writing the MTP header…')
     with open(target, 'rb') as fin, open(tmp, 'wb') as fout:
         w = _W(fout)
         fout.write(b'GGUF')
@@ -323,17 +323,17 @@ def inject_into_gguf(target, tensors, emit=print):
                 raise RuntimeError('tensor boyutu uyusmuyor')
             fout.write(data)
     os.replace(tmp, target)
-    emit(f'MTP basligi eklendi ({len(new_tensors)} tensor).')
+    emit(f'MTP header added ({len(new_tensors)} tensors).')
 
 
 def ensure_mtp(target, cfg, token=None, emit=print):
-    """target GGUF'una (gerekliyse) MTP basligini ekler. Idempotent."""
+    """Add the MTP header to the target GGUF (when needed). Idempotent."""
     if not os.path.exists(target):
         raise FileNotFoundError(target)
     if has_mtp(target):
-        emit('MTP basligi zaten mevcut.')
+        emit('MTP header already present.')
         return False
-    emit('MTP basligi eksik; kaynaktan cekiliyor…')
+    emit('MTP header missing; fetching it from the source…')
     tensors = fetch_mtp_tensors(cfg['repo'], cfg.get('revision'), token)
     inject_into_gguf(target, tensors, emit)
     return True

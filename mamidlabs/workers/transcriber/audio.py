@@ -1,7 +1,7 @@
-"""Ses hazirligi: herhangi bir ses/video dosyasini 16 kHz mono PCM WAV'a cevirir.
+"""Audio preparation: converts any audio/video file to 16 kHz mono PCM WAV.
 
-PyAV kullanilir (ffmpeg ikilisi gerekmez). Uzun kayitlar (lite tier; chunk_minutes>0) `wave` modulu ile
-parcalara bolunur; boylece 16 GB sistem RAM'i sismez.
+Uses PyAV (no ffmpeg binary needed). Long recordings (lite tier; chunk_minutes>0) are split into
+parts with the `wave` module, so 16 GB of system RAM is not blown up.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ SAMPLE_RATE = 16000
 
 
 def to_wav16k_mono(src: str, dst: str | None = None) -> str:
-    """src -> 16 kHz mono s16le WAV. dst verilmezse src ile ayni klasorde uretir."""
+    """src -> 16 kHz mono s16le WAV. When dst is not given it is produced in the same folder as src."""
     if dst is None:
         base, _ = os.path.splitext(src)
         dst = base + '.16k.wav'
@@ -21,7 +21,7 @@ def to_wav16k_mono(src: str, dst: str | None = None) -> str:
 
     with av.open(src) as container:
         if not container.streams.audio:
-            raise ValueError('Ses akisi bulunamadi: %s' % src)
+            raise ValueError('No audio stream found: %s' % src)
         stream = container.streams.audio[0]
         resampler = AudioResampler(format='s16', layout='mono', rate=SAMPLE_RATE)
         with av.open(dst, 'w', format='wav') as out:
@@ -43,10 +43,10 @@ def duration_seconds(wav_path: str) -> float:
 
 
 def probe_duration_seconds(path: str) -> float | None:
-    """Herhangi bir ses/video dosyasinin suresini (saniye) TAM COZMEDEN tahmin eder.
+    """Estimate the duration (seconds) of any audio/video file WITHOUT fully decoding it.
 
-    Cihaz/swap plani icin kullanilir (kisa/uzun karari); tam WAV'a cevirmek gerekmez.
-    Okunamazsa None doner.
+    Used for the device/swap plan (short/long decision); it does not need a full WAV conversion.
+    Returns None when it cannot be read.
     """
     try:
         import av
@@ -63,20 +63,20 @@ def probe_duration_seconds(path: str) -> float | None:
 
 
 def read_mono_float32(wav_path: str):
-    """16 kHz mono WAV'i [-1, 1] float32 numpy dizisine okur (VAD icin)."""
+    """Read a 16 kHz mono WAV into a [-1, 1] float32 numpy array (for VAD)."""
     import numpy as np
 
     with wave.open(wav_path, 'rb') as w:
-        assert w.getframerate() == SAMPLE_RATE, 'VAD 16 kHz bekler'
+        assert w.getframerate() == SAMPLE_RATE, 'VAD expects 16 kHz'
         frames = w.readframes(w.getnframes())
     data = np.frombuffer(frames, dtype='<i2').astype('float32') / 32768.0
     return data
 
 
 def split_wav(wav_path: str, minutes: int) -> list[tuple[str, float]]:
-    """WAV'i `minutes` dilimlerine boler. [(parca_yolu, baslangic_saniye), ...] doner.
+    """Split the WAV into `minutes` slices. Returns [(chunk_path, start_second), ...].
 
-    minutes <= 0 ise ya da kayit kisaysa tek parca [(wav_path, 0.0)] doner.
+    When minutes <= 0 or the recording is short, a single chunk [(wav_path, 0.0)] is returned.
     """
     if minutes <= 0:
         return [(wav_path, 0.0)]

@@ -366,16 +366,17 @@ def memory_budget(model: Path, profile_id: str, projector: Path | None,
     needed = model_mib + overhead
     tolerance = 1024 if profile_id == "lite" else 0
     if free_mib < needed - tolerance:
-        pool = "birleşik bellek" if sys.platform == "darwin" else "boş VRAM"
+        pool = "unified memory" if sys.platform == "darwin" else "free VRAM"
         raise MemoryError_(
-            f"Yetersiz {pool}: {free_mib} MiB kullanılabilir, \"{profile_id}\" profili için tahmini en az "
-            f"{needed} MiB gerekir (model ~{model_mib} MiB, önbellek/hesap payı {overhead} MiB). "
-            "Belleği kullanan başka uygulamaları (tarayıcı, başka bir MamidLabs süreci vb.) kapatıp "
-            "tekrar dene, ya da daha küçük bir profil seç."
+            f"Not enough {pool}: {free_mib} MiB available, the \"{profile_id}\" profile needs an "
+            f"estimated minimum of {needed} MiB (model ~{model_mib} MiB, cache/compute headroom "
+            f"{overhead} MiB). "
+            "Close other applications that use memory (browser, another MamidLabs process, etc.) "
+            "and try again, or choose a smaller profile."
         )
     if free_mib < needed:
-        return (f"Kullanılabilir bellek tahmini ihtiyacın {needed - free_mib} MiB altında; llama.cpp büyük "
-                "gömme tensorünü CPU'da tutarak yükleyecek (küçük hız kaybı olabilir).")
+        return (f"Available memory is about {needed - free_mib} MiB below the estimate; llama.cpp "
+                "will keep the large embedding tensor on the CPU (a small speed loss is possible).")
     return None
 
 
@@ -490,7 +491,7 @@ class FileLock:
             if time.time() >= deadline:
                 self._handle.close()
                 self._handle = None
-                raise TimeoutError("Model kontrolü başka bir işlem tarafından kullanılıyor.")
+                raise TimeoutError("Model control is in use by another process.")
             time.sleep(0.2)
         return self
 
@@ -546,15 +547,15 @@ class ModelManager:
         with FileLock(self.lock_path):
             running = managed_servers(self._list_processes(), self._server())
             if running and f"--alias {alias}" in running[0].args and len(running) == 1:
-                return f"Zaten yüklü: {alias} (PID {running[0].pid})"
+                return f"Already loaded: {alias} (PID {running[0].pid})"
             self._stop_servers(running)
 
             if not self._server().exists():
-                raise FileNotFoundError(f"llama-server bulunamadı: {self._server()}")
+                raise FileNotFoundError(f"llama-server not found: {self._server()}")
             if not model.exists():
-                raise FileNotFoundError(f"Model bulunamadı: {model}")
+                raise FileNotFoundError(f"Model not found: {model}")
             if not custom and profile_id != "lite" and projector and not projector.exists():
-                raise FileNotFoundError(f"Görsel projektörü bulunamadı: {projector}")
+                raise FileNotFoundError(f"Vision projector not found: {projector}")
 
             self._cleanup_before_load(profile_id, skip_memory_check)
             args = server_args(self.paths, self.settings, profile_id, model, projector,
@@ -573,18 +574,18 @@ class ModelManager:
                 out.close()
                 err.close()
             self.paths.server_pid_file.write_text(str(child.pid), encoding="utf-8")
-            return f"Yükleniyor: {alias} (PID {child.pid})"
+            return f"Loading: {alias} (PID {child.pid})"
 
     def stop(self) -> str:
         with FileLock(self.lock_path):
             running = managed_servers(self._list_processes(), self._server())
             self._stop_servers(running)
-        return "Model durduruldu."
+        return "Model stopped."
 
     def close_comfy(self) -> str:
         with FileLock(self.lock_path):
             stop_idle_comfy(self._list_processes(), self.paths.root)
-        return "ComfyUI kapatıldı (kuyruk boşsa)."
+        return "ComfyUI closed (if the queue was empty)."
 
     # --- internals -----------------------------------------------------------
     def _custom_model(self, model_id: str | None) -> dict | None:
@@ -594,7 +595,7 @@ class ModelManager:
         for entry in self.settings.get("localModels", []):
             if entry.get("id") == selected:
                 return entry
-        raise FileNotFoundError("Kayıtlı yerel model bulunamadı.")
+        raise FileNotFoundError("The registered local model was not found.")
 
     def _stop_servers(self, running: list[Proc]) -> None:
         for proc in running:
@@ -604,7 +605,7 @@ class ModelManager:
             while managed_servers(self._list_processes(), self._server()) and time.time() < deadline:
                 time.sleep(0.25)
             if managed_servers(self._list_processes(), self._server()):
-                raise RuntimeError("Önceki model süreci kapanmadı.")
+                raise RuntimeError("The previous model process did not exit.")
             time.sleep(0.5)
 
     def _cleanup_before_load(self, profile_id: str, skip_memory_check: bool) -> None:
@@ -624,7 +625,7 @@ class ModelManager:
                                         projector_path(self.paths, profile_id),
                                         self._free_mib())
                 if warning:
-                    print(f"UYARI: {warning}")
+                    print(f"WARNING: {warning}")
                 return
             except MemoryError_ as exc:
                 last_error = exc

@@ -1,87 +1,87 @@
-"""Konusma disi ses olaylari (AudioSet/AST). Etiketler Turkce ifadeye cevrilir.
+"""Non-speech sound events (AudioSet/AST). Labels are turned into readable phrases.
 
-Onemli tasarim karari: konusma etiketleri ("Speech", "Male/Female speech" ...) elenir,
-yoksa her konusma satirinin yanina gereksiz "(konusma sesi)" eklenir. Guven esiginin
-altindaki olaylar ve ardisik tekrarlar temizlenir.
+Important design decision: speech labels ("Speech", "Male/Female speech" ...) are filtered out,
+otherwise an unnecessary "(speech sound)" is added next to every speech line. Events below the
+confidence threshold and consecutive repeats are cleaned up.
 
-Sinir: AST ~10 sn'lik pencerelerle calisir; olay zamani saniye degil pencere
-hassasiyetindedir. Pencereler kaydirilarak (hop) iyilestirilir ama tam hassas olmaz.
+Limitation: AST works in ~10 s windows; the event time is window-accurate, not second-accurate.
+Sliding windows (hop) improve this but it is not exact.
 """
 from __future__ import annotations
 
 _EVENT_MODEL_CACHE: dict = {}
 
-# AST'nin konusma ile ilgili etiketleri: olay sayilmaz.
+# AST's speech-related labels: not counted as events.
 SPEECH_LABELS = {
     'speech', 'male speech, man speaking', 'female speech, woman speaking',
     'child speech, kid speaking', 'conversation', 'narration, monologue',
     'speech synthesizer', 'whoosh, swoosh, swish', 'silence',
     'inside, small room', 'inside, large room or hall', 'outside, urban or manmade',
-    'outside, rural or natural', 'music',  # 'music' gurultu olabilir; esikle filtrelenir
+    'outside, rural or natural', 'music',  # 'music' may be noise; filtered by the threshold
 }
 
-# AudioSet etiketi -> Turkce ifade (sik gecen olaylar). Yoksa etiket oldugu gibi kalir.
+# AudioSet label -> readable phrase (common events). Anything else keeps the raw label.
 LABEL_TR = {
-    'walk, footsteps': 'ayak sesleri',
-    'footsteps': 'ayak sesleri',
-    'door': 'kapı sesi',
-    'doorbell': 'kapı zili',
-    'knock': 'kapı vurma sesi',
-    'knock, knock': 'kapı vurma sesi',
-    'slam': 'kapı çarpma sesi',
-    'applause': 'alkış',
-    'laughter': 'gülüşme',
-    'giggle': 'kıkırdama',
-    'cough': 'öksürük',
-    'sneeze': 'hapşırma',
-    'sigh': 'iç çekme',
-    'breathing': 'nefes sesi',
-    'crying, sobbing': 'ağlama',
-    'shout': 'bağırma',
-    'screaming': 'çığlık',
-    'whispering': 'fısıltı',
-    'glass': 'cam sesi',
-    'shatter': 'cam kırılması',
-    'thump, thud': 'gümlü ses',
-    'bang': 'patlama sesi',
-    'beep, bleep': 'bip sesi',
-    'ringtone': 'zil sesi',
-    'telephone': 'telefon sesi',
-    'typing': 'klavye sesi',
-    'writing': 'yazma sesi',
-    'printer': 'yazıcı sesi',
-    'water': 'su sesi',
-    'pouring water': 'su dökme sesi',
-    'tap': 'musluk sesi',
-    'dishes, pots, and pans': 'mutfak eşyası sesi',
-    'paper rustling': 'kağıt hışırtısı',
-    'crackle': 'çıtırtı',
-    'engine': 'motor sesi',
-    'car': 'araba sesi',
-    'vehicle': 'araç sesi',
-    'air conditioner': 'klima sesi',
-    'vacuum cleaner': 'süpürge sesi',
-    'dog': 'köpek sesi',
-    'bark': 'köpek havlaması',
-    'cat': 'kedi sesi',
-    'meow': 'miyavlama',
-    'bird': 'kuş sesi',
-    'crowd': 'kalabalık sesi',
-    'chatter': 'konuşma uğultusu',
-    'noise': 'gürültü',
-    'white noise': 'beyaz gürültü',
-    'static': 'parazit',
-    'hum': 'uğultu',
-    'cacophony': 'uğultu',
-    'environmental noise': 'ortam gürültüsü',
-    'background noise': 'arka plan gürültüsü',
-    'wind': 'rüzgar sesi',
-    'rain': 'yağmur sesi',
-    'thunder': 'gök gürültüsü',
-    'alarm': 'alarm sesi',
-    'siren': 'siren sesi',
-    'fireworks': 'havai fişek',
-    'gunshot, gunfire': 'silah sesi',
+    'walk, footsteps': 'footsteps',
+    'footsteps': 'footsteps',
+    'door': 'door sound',
+    'doorbell': 'doorbell',
+    'knock': 'knocking sound',
+    'knock, knock': 'knocking sound',
+    'slam': 'door slam',
+    'applause': 'applause',
+    'laughter': 'laughter',
+    'giggle': 'giggling',
+    'cough': 'cough',
+    'sneeze': 'sneeze',
+    'sigh': 'sigh',
+    'breathing': 'breathing',
+    'crying, sobbing': 'crying',
+    'shout': 'shouting',
+    'screaming': 'scream',
+    'whispering': 'whispering',
+    'glass': 'glass sound',
+    'shatter': 'breaking glass',
+    'thump, thud': 'thump',
+    'bang': 'bang',
+    'beep, bleep': 'beep',
+    'ringtone': 'ringtone',
+    'telephone': 'telephone ring',
+    'typing': 'typing',
+    'writing': 'writing',
+    'printer': 'printer',
+    'water': 'water',
+    'pouring water': 'pouring water',
+    'tap': 'tap',
+    'dishes, pots, and pans': 'kitchenware',
+    'paper rustling': 'rustling paper',
+    'crackle': 'crackle',
+    'engine': 'engine',
+    'car': 'car',
+    'vehicle': 'vehicle',
+    'air conditioner': 'air conditioner',
+    'vacuum cleaner': 'vacuum cleaner',
+    'dog': 'dog',
+    'bark': 'barking',
+    'cat': 'cat',
+    'meow': 'meow',
+    'bird': 'bird',
+    'crowd': 'crowd',
+    'chatter': 'chatter',
+    'noise': 'noise',
+    'white noise': 'white noise',
+    'static': 'static',
+    'hum': 'hum',
+    'cacophony': 'cacophony',
+    'environmental noise': 'environmental noise',
+    'background noise': 'background noise',
+    'wind': 'wind',
+    'rain': 'rain',
+    'thunder': 'thunder',
+    'alarm': 'alarm',
+    'siren': 'siren',
+    'fireworks': 'fireworks',
+    'gunshot, gunfire': 'gunshot',
 }
 
 
@@ -89,7 +89,7 @@ def _translate(label: str) -> str:
     key = label.strip().lower()
     if key in LABEL_TR:
         return LABEL_TR[key]
-    # Bilinen kalibi ara ("walk, footsteps" gibi virgullu etiketler icin).
+    # Look for a known pattern (for comma-separated labels like "walk, footsteps").
     for aset, tr in LABEL_TR.items():
         if aset in key:
             return tr
@@ -125,7 +125,7 @@ def unload_events_model():
 
 def tag(wav_path: str, profile, device: str = 'cuda', threshold: float = 0.3,
         window: float = 10.0, hop: float = 5.0, top_k: int = 3, offset: float = 0.0) -> list[dict]:
-    """Ses olayi pencerelerini etiketler. Olay yoksa/bagimlilik yoksa bos liste doner."""
+    """Label the sound event windows. Returns an empty list when there are no events/dependencies."""
     if not profile.events or profile.events_model in (None, '', 'none'):
         return []
     try:
@@ -135,9 +135,9 @@ def tag(wav_path: str, profile, device: str = 'cuda', threshold: float = 0.3,
     except Exception:
         return []
 
-    # AST modeli yuklenemezse (or. HF onbellegi eksik: HF_HOME ayarlanmamis ve varsayilan
-    # onbellekte model yok) TUM dökum DUSMEMELI; olaylar atlanir. Aksi halde sesli giris
-    # tamamen hata veriyordu (bkz. tests/test_transcriber.py).
+    # If the AST model cannot be loaded (e.g. a missing HF cache: HF_HOME is not set and the model
+    # is not in the default cache) the WHOLE transcript MUST NOT FAIL; events are skipped. Otherwise
+    # audio input failed completely (see tests/test_transcriber.py).
     try:
         extractor, model = _load_events_model(profile)
     except Exception:
@@ -155,7 +155,7 @@ def tag(wav_path: str, profile, device: str = 'cuda', threshold: float = 0.3,
     raw: list[dict] = []
     for start in range(0, max(len(samples) - win + step, step), step):
         chunk = samples[start:start + win]
-        if len(chunk) < rate:  # 1 sn'den kisa pencereyi atla
+        if len(chunk) < rate:  # skip a window shorter than 1 s
             continue
         try:
             inputs = extractor(chunk, sampling_rate=rate, return_tensors='pt')
@@ -195,7 +195,7 @@ def tag(wav_path: str, profile, device: str = 'cuda', threshold: float = 0.3,
 
 
 def _merge_repeats(events: list[dict], gap: float = 6.0) -> list[dict]:
-    """Ayni etiket ardisik pencerelerde tekrar ederse tek olaya indirir."""
+    """Collapse the same label repeated in consecutive windows into a single event."""
     events = sorted(events, key=lambda e: e['start'])
     merged: list[dict] = []
     for event in events:

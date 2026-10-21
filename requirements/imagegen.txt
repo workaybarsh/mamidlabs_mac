@@ -1,14 +1,14 @@
-# venv/imagegen: ComfyUI ve video kare araçları (PyAV).
+# venv/imagegen: ComfyUI and the video frame tools (PyAV).
 #
-# torch/torchvision/torchaudio bu dosyada YOK: macOS'ta PyPI tekerlekleri
-# Metal (MPS) desteğiyle gelir, ayrı bir index gerekmez ve kurulum betiği
-# bunları açıkça kurar:
+# torch/torchvision/torchaudio are NOT in this file: on macOS the PyPI wheels ship
+# with Metal (MPS) support, no separate index is needed, and the installer installs
+# them explicitly:
 #   venv/imagegen/bin/python -m pip install torch torchvision torchaudio
 #   venv/imagegen/bin/python -m pip install -r requirements/imagegen.txt
 #
-# ComfyUI'nin kendi requirements.txt'i ayrıca ComfyUI klasöründen kurulur.
+# ComfyUI's own requirements.txt is installed separately from the ComfyUI folder.
 #
-# transformers: ComfyUI metin kodlayıcısı için gerekir; ComfyUI yalnızca
-# >=4.50.3 ister, burada sabitlenir (ComfyUI b0f4b7b ile doğrulanan: 5.17.0).
+# transformers: needed for the ComfyUI text encoder; ComfyUI only asks for
+# >=4.50.3, it is pinned here (verified with ComfyUI b0f4b7b: 5.17.0).
 transformers==5.17.0
 av==18.1.0

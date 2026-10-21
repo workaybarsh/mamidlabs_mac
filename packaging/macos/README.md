@@ -1,65 +1,66 @@
-# MamidLabs macOS paketleme (.dmg)
+# MamidLabs macOS packaging (.dmg)
 
-Bu klasör, MamidLabs macOS sürümünün **`.dmg` disk görüntüsünü** üretir. DMG'nin
-içinde **“MamidLabs Kurulum.app”** vardır: kullanıcı uygulamayı `Applications`
-klasörüne sürükler ve çalıştırır, sihirbaz donanımı ölçüp uygun profili önerir,
-sonra gerçek kurulumu (llama.cpp, ComfyUI, modeller) yapar.
+This folder produces the **`.dmg` disk image** of the MamidLabs macOS edition. The DMG
+contains **“MamidLabs Setup.app”**: the user drags the app into `Applications` and runs
+it, the wizard measures the hardware and suggests a suitable profile, then performs the
+real installation (llama.cpp, ComfyUI, models).
 
-## Neden `.dmg`
+## Why `.dmg`
 
-Kurulumun kendisi (llama.cpp, ComfyUI, ~36–52 GB model) kullanıcıya sorularak
-yapılmalıdır. Bu yüzden DMG *hazır bir kurulum* değil, **kurulum aracını** dağıtır:
+The installation itself (llama.cpp, ComfyUI, ~36–52 GB of models) has to happen with the
+user's consent. That is why the DMG does not ship a *ready installation* but the
+**installer tool**:
 
-1. `MamidLabs-Kurulum-1.0.0.dmg`'yi aç.
-2. **MamidLabs Kurulum** uygulamasını `Applications` klasörüne sürükle.
-3. Çalıştır → sihirbaz: dil (TR/EN) → karşılama → lisans → klasör → donanım
-   raporu → profil (LITE/PRO/indirme yok/kendi modelin) → (kendi modellerin) →
-   (API) → (bileşenler) → hazır → kurulum → özet → bitiş.
+1. Open `MamidLabs-Setup-1.0.0.dmg`.
+2. Drag the **MamidLabs Setup** app into the `Applications` folder.
+3. Run it → wizard: language (EN/TR) → welcome → licence → folder → hardware
+   report → profile (LITE/PRO/no download/own model) → (your own models) →
+   (API) → (components) → ready → install → summary → finish.
 
-## Derleme
+## Building
 
 ```bash
 packaging/macos/build-dmg.sh
-# çıktı: packaging/macos/Output/MamidLabs-Kurulum-1.0.0.dmg
+# output: packaging/macos/Output/MamidLabs-Setup-1.0.0.dmg
 ```
 
-Seçenekler: `--output <dizin>`, `--no-icon`.
+Options: `--output <dir>`, `--no-icon`.
 
-Gereksinim: **macOS** (`hdiutil`). Simge `.icns` için `sips`/`iconutil` kullanılır
-(yoksa ikonsuz derlenir). Derleme makinesinde Python gerekmez; sürüm
-`mamidlabs/__init__.py` dosyasından okunur.
+Requirement: **macOS** (`hdiutil`). `sips`/`iconutil` are used for the `.icns` icon
+(without them it is built without an icon). Python is not needed on the build machine;
+the version is read from `mamidlabs/__init__.py`.
 
-## Paketin içeriği
+## Package contents
 
 ```
-MamidLabs Kurulum.app/
+MamidLabs Setup.app/
   Contents/
-    Info.plist                          @VERSION@ ile doldurulur
-    MacOS/MamidLabsSetup                yürütücü (PYTHONPATH = gömülü kaynaklar)
+    Info.plist                          filled in with @VERSION@
+    MacOS/MamidLabsSetup                launcher (PYTHONPATH = embedded sources)
     Resources/mamidlabs-src/            mamidlabs/, scripts/, requirements/, EULA.txt, ...
-    Resources/mamidlabs.icns            simge (üretilebilirse)
+    Resources/mamidlabs.icns            icon (when it can be generated)
 ```
 
-Yürütücü sistem Python'unu (ya da Homebrew `python3.12`'yi) bulup
-`python3 -m mamidlabs.wizard` çalıştırır. Sihirbaz, `install-mamidlabs.sh`'i DMG
-içindeki **gömülü** kopyadan çalıştırır; kurulum kökü varsayılan
-`~/Library/Application Support/mamidlabs` (`MAMIDLABS_ROOT` ile değişir), uygulama
-paketi de `~/Applications/MamidLabs.app` olarak kurulur.
+The launcher finds the system Python (or Homebrew `python3.12`) and runs
+`python3 -m mamidlabs.wizard`. The wizard runs `install-mamidlabs.sh` from the
+**embedded** copy inside the DMG; the install root defaults to
+`~/Library/Application Support/mamidlabs` (changed with `MAMIDLABS_ROOT`), and the
+application bundle is installed as `~/Applications/MamidLabs.app`.
 
-## Bağımlılıklar
+## Dependencies
 
 - **Python 3.11–3.13** (`brew install python@3.12`)
-- **PySide6** — sihirbaz için: `python3 -m pip install PySide6`
+- **PySide6** — for the wizard: `python3 -m pip install PySide6`
 
-PySide6 yoksa sihirbaz `wizard.error.no_pyside` mesajını yazıp **2** koduyla
-çıkar; kurulum terminalden de yapılabilir:
+Without PySide6 the wizard prints the `wizard.error.no_pyside` message and exits with
+code **2**; the installation can also be done from the terminal:
 
 ```bash
-./scripts/install-mamidlabs.sh --profile flash --language tr
+./scripts/install-mamidlabs.sh --profile flash --language en
 ```
 
-## İmzalama (not)
+## Signing (note)
 
-Üretilen `.app`/`.dmg` **imzasızdır**; dağıtım için `codesign` + `notarytool` ile
-imzalanıp noterlenmesi gerekir (Apple Developer kimliği). Yerel kullanımda
-Gatekeeper "geliştirici doğrulanamadı" uyarısı verirse: sağ tık → **Aç**.
+The generated `.app`/`.dmg` is **unsigned**; distribution requires signing with
+`codesign` and notarising with `notarytool` (an Apple Developer identity). For local use,
+if Gatekeeper warns that the developer cannot be verified: right-click → **Open**.

@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- MamidLabs KURULUM SİHİRBAZI .app şablonu (DMG için). build-dmg.sh @VERSION@ yerine sürümü koyar. -->
+<!-- MamidLabs SETUP WIZARD .app template (for the DMG). build-dmg.sh fills in @VERSION@. -->
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key>
-  <string>MamidLabs Kurulum</string>
+  <string>MamidLabs Setup</string>
   <key>CFBundleDisplayName</key>
-  <string>MamidLabs Kurulum</string>
+  <string>MamidLabs Setup</string>
   <key>CFBundleIdentifier</key>
   <string>com.workaybarsh.mamidlabs.setup</string>
   <key>CFBundleVersion</key>

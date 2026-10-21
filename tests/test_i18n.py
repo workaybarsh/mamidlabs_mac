@@ -17,7 +17,7 @@ def _catalog(code: str) -> dict[str, str]:
 
 def test_catalogs_have_identical_keys():
     tr, en = _catalog("tr"), _catalog("en")
-    assert set(tr) == set(en), "TR ve EN aynı anahtar kümesine sahip olmalı"
+    assert set(tr) == set(en), "TR and EN must have the same key set"
     assert "prompt.system" in tr
     assert "wizard.title" in tr
 
@@ -30,7 +30,7 @@ def test_catalogs_are_not_empty():
 @pytest.mark.parametrize("value,expected", [
     ("en", "en"), ("EN", "en"), ("en-US", "en"), ("english", "en"),
     ("tr", "tr"), ("tr_TR", "tr"), ("türkçe", "tr"), ("turkce", "tr"),
-    ("klingon", "tr"), (None, "tr"), ("", "tr"),
+    ("klingon", "en"), (None, "en"), ("", "en"),
 ])
 def test_normalize_maps_aliases_to_supported_codes(value, expected):
     assert i18n.normalize(value) == expected
@@ -39,11 +39,11 @@ def test_normalize_maps_aliases_to_supported_codes(value, expected):
 def test_language_setter_and_current():
     assert i18n.set_language("en") == "en"
     assert i18n.current() == "en"
-    assert i18n.set_language("bilinmeyen") == "tr"
+    assert i18n.set_language("bilinmeyen") == "en"
 
 
 def test_unknown_key_returns_the_key_itself():
-    assert i18n.t("bu.anahtar.yok") == "bu.anahtar.yok"
+    assert i18n.t("no.such.key") == "no.such.key"
 
 
 def test_translation_formatting_uses_placeholders():
@@ -52,16 +52,17 @@ def test_translation_formatting_uses_placeholders():
         "llama.cpp (2/7)"
 
 
-def test_missing_english_key_falls_back_to_turkish():
-    """A key that only exists in TR still renders (never an empty label)."""
-    i18n._catalogs["en"] = {}  # simulate a truncated en.json
+def test_missing_turkish_key_falls_back_to_english():
+    """A key that only exists in EN still renders (never an empty label)."""
+    i18n.set_language("tr")
+    i18n._catalogs["tr"] = {}  # simulate a truncated tr.json
     try:
-        assert i18n.t("wizard.title") == _catalog("tr")["wizard.title"]
+        assert i18n.t("wizard.title") == _catalog("en")["wizard.title"]
     finally:
-        i18n._catalogs.pop("en", None)
+        i18n._catalogs.pop("tr", None)
 
 
-def test_configure_console_makes_turkish_printable():
+def test_configure_console_makes_non_ascii_printable():
     """Redirected output can fall back to ASCII (LANG=C); the CLI must fix it."""
     buffer = io.BytesIO()
     stream = io.TextIOWrapper(buffer, encoding="ascii")

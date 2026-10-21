@@ -53,7 +53,7 @@ CHAT_PROVIDERS: tuple[Provider, ...] = (
              "https://api.deepseek.com/chat/completions",
              "https://api.deepseek.com/models",
              "https://platform.deepseek.com/api_keys", vision=False),
-    Provider("custom", "Özel (OpenAI uyumlu)", "CUSTOM_API_KEY",
+    Provider("custom", "Custom (OpenAI-compatible)", "CUSTOM_API_KEY",
              "", "", "", needs_base_url=True),
 )
 
@@ -77,7 +77,7 @@ def endpoint_for(provider_id: str, settings: Settings, base_url_override: str = 
     if provider_id == "custom":
         base = custom_base_url(settings, base_url_override)
         if not base:
-            raise ValueError("Özel API için önce API bağlantıları penceresinden taban adresi gir.")
+            raise ValueError("Enter the base URL for the custom API in the API connections window first.")
         return f"{base}/chat/completions"
     entry = get_provider(provider_id)
     return entry.endpoint if entry else LOCAL_ENDPOINT
@@ -87,11 +87,11 @@ def models_url_for(provider_id: str, settings: Settings, base_url_override: str 
     if provider_id == "custom":
         base = custom_base_url(settings, base_url_override)
         if not base:
-            raise ValueError("Önce taban adresi gir.")
+            raise ValueError("Enter the base URL first.")
         return f"{base}/models"
     entry = get_provider(provider_id)
     if not entry:
-        raise ValueError(f"Bilinmeyen sağlayıcı: {provider_id}")
+        raise ValueError(f"Unknown provider: {provider_id}")
     return entry.models_url
 
 
@@ -114,18 +114,18 @@ def fetch_models(provider_id: str, key: str, settings: Settings,
     """Validate a key against the provider's models endpoint and list chat models."""
     entry = get_provider(provider_id)
     if not entry:
-        raise ValueError(f"Bilinmeyen sağlayıcı: {provider_id}")
+        raise ValueError(f"Unknown provider: {provider_id}")
     if not key and provider_id != "custom":
-        raise ValueError("Önce API anahtarını gir.")
+        raise ValueError("Enter the API key first.")
     url = models_url_for(provider_id, settings, base_url_override)
     try:
         data = _http_json(url, auth_headers(provider_id, key))
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
-            raise ValueError(f"{entry.label} anahtarı reddetti ({exc.code}). Anahtarı kontrol et.") from exc
-        raise ValueError(f"{entry.label} bağlantısı kurulamadı: {exc}") from exc
+            raise ValueError(f"{entry.label} rejected the key ({exc.code}). Check the key.") from exc
+        raise ValueError(f"Could not connect to {entry.label}: {exc}") from exc
     except Exception as exc:  # noqa: BLE001 - surfaced verbatim to the UI
-        raise ValueError(f"{entry.label} bağlantısı kurulamadı: {exc}") from exc
+        raise ValueError(f"Could not connect to {entry.label}: {exc}") from exc
 
     ids = [str(m.get("id", "")).removeprefix("models/") for m in data.get("data", [])]
     ids = [i for i in ids if i]
@@ -194,8 +194,8 @@ def to_text_only(messages: list[dict]) -> list[dict]:
             if part.get("type") == "text":
                 texts.append(str(part.get("text", "")))
             elif part.get("type") == "image_url":
-                texts.append("[Kullanıcı bir görsel ekledi; bu sağlayıcı görsel okuyamıyor. "
-                             "Gerekirse OCR sonucunu kullan.]")
+                texts.append("[The user attached an image; this provider cannot read images. "
+                             "Use the OCR result if needed.]")
         copy = dict(message)
         copy["content"] = "\n".join(texts)
         out.append(copy)
